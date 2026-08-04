@@ -1,0 +1,14 @@
+[project]
+name = "world-model-sandbox"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "rl-commons",
+    "torch>=2.13.0",
+    "tqdm>=4.70.0",
+]
+
+[tool.uv.sources]
+rl-commons = { git = "https://github.com/kieranparanjpe/rl-commons.git" }
