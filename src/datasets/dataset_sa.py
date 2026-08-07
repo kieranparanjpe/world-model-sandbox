@@ -28,10 +28,10 @@ class DatasetSA(Dataset):
     def __len__(self):
         return len(self.current_observations)
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx) -> dict[str, torch.Tensor]:
         return {
-            "current_observation": self.current_observations[idx],
-            "action": self.actions[idx],
-            "next_observation": self.next_observations[idx]
+            "current_observations": self.current_observations[idx],
+            "actions": self.actions[idx],
+            "next_observations": self.next_observations[idx]
         }
 
