@@ -1,34 +1,69 @@
 import copy
-from typing import Optional
+import os
+from typing import Optional, Callable
 
+import numpy as np
 import torch
-from rl_commons.log import Logger
+from ml_commons.config import RunInfo
+from ml_commons.log import Logger
 from torch import nn, optim
 from torch.utils.data import DataLoader
-from tqdm.auto import tqdm
 
 from src.algorithms import Algorithm
-from src.algorithms.algorithm_config import JepaConfig
+from src.algorithms.jepa.encoder import Encoder
+from src.algorithms.jepa.jepa_config import JepaConfig
+from src.algorithms.jepa.predictor import Predictor
 from src.datasets.dataset_sa import DatasetSA
+
+def jepa_factory(hyperparameters : JepaConfig,
+                 run_info : RunInfo,
+                 obs_dimension : int,
+                 action_dimension : int,
+                 dataset : DatasetSA,
+                 logger : Optional[Logger],
+                 device: torch.device = torch.device('cpu'),
+                 should_save_models=False):
+    encoder_factory = lambda : Encoder(obs_dimension, hyperparameters.encoder_config)
+    predictor_factory = lambda : Predictor(action_dimension, hyperparameters.predictor_config)
+
+    return JEPA(hyperparameters, run_info, obs_dimension, encoder_factory, predictor_factory, dataset, logger, device,
+                should_save_models)
 
 
 class JEPA(Algorithm):
+    encoder: nn.Module
+    predictor: nn.Module
+    label_encoder: nn.Module
+
+    encoder_optimiser: torch.optim.Optimizer
+    predictor_optimiser: torch.optim.Optimizer
+
+    hyperparameters: JepaConfig
+    dataset: DatasetSA
 
     def __init__(self, hyperparameters : JepaConfig,
+                 run_info : RunInfo,
                  obs_dimension: int,
-                 encoder : nn.Module,
-                 predictor : nn.Module,
+                 encoder_factory : Callable[[], nn.Module],
+                 predictor_factory : Callable[[], nn.Module],
                  dataset : DatasetSA,
                  logger: Optional[Logger] = None,
-                 device: torch.device = torch.device('cpu')):
-        super().__init__(hyperparameters, obs_dimension, dataset, logger, device)
+                 device: torch.device = torch.device('cpu'),
+                 should_save_models=False):
+        super().__init__(hyperparameters, run_info, obs_dimension, dataset, logger, device, should_save_models)
 
-        self.encoder = encoder
-        self.predictor = predictor
-        self.label_encoder = copy.deepcopy(encoder)
-        self.hyperparameters : JepaConfig
+        self.encoder_factory = encoder_factory
+        self.predictor_factory = predictor_factory
+        self.reset_models()
 
         self.criterion = nn.MSELoss()
+
+    # noinspection PyAttributeOutsideInit
+    def reset_models(self):
+        self.encoder = self.encoder_factory()
+        self.predictor = self.predictor_factory()
+        self.label_encoder = copy.deepcopy(self.encoder)
+
         self.encoder_optimiser = optim.Adam(self.encoder.parameters(),
                                             lr=self.hyperparameters.encoder_lr,
                                             weight_decay=self.hyperparameters.encoder_regularization)
@@ -36,31 +71,54 @@ class JEPA(Algorithm):
                                               lr=self.hyperparameters.predictor_lr,
                                               weight_decay=self.hyperparameters.predictor_regularization)
 
-        self.logger.add_elements({
-            "losses/loss": 0.0,
-        })
-
         # Freeze grads for label encoder. it is updated with EMA
         for param in self.label_encoder.parameters():
             param.requires_grad = False
 
-    def resolve_dataset(self, dataset : DatasetSA):
-        pass
+    def save_models(self, current_epoch : int):
+        encoder_path = self.run_info.local_folder_path("saved_networks/jepa/encoders")
+        os.makedirs(encoder_path, exist_ok=True)
+        predictor_path = self.run_info.local_folder_path("saved_networks/jepa/predictors")
+        os.makedirs(predictor_path, exist_ok=True)
+
+        epochs = self.hyperparameters.epochs
+        width = len(str(epochs))
+
+        torch.save(self.encoder.state_dict(),
+                   f'{encoder_path}/encoder_{current_epoch:0{width}d}.pth')
+        torch.save(self.encoder.state_dict(),
+                   f'{predictor_path}/predictor_{current_epoch:0{width}d}.pth')
+
+
+    def forward(self, current_observations, actions, next_observations):
+        encoding = self.encoder(current_observations)
+        prediction = self.predictor(encoding, actions)
+
+        encoded_label = self.label_encoder(next_observations)
+
+        loss = self.criterion(prediction, encoded_label)
+
+        return encoding, prediction, encoded_label, loss
+
+    def extract_batch(self, batch: dict[str, torch.Tensor]) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        return (batch["current_observations"].to(self.device),
+                batch["actions"].to(self.device),
+                batch["next_observations"].to(self.device))
 
     def train_single_epoch(self, train_loader : DataLoader[DatasetSA]):
+        """
+        Side effect: places loss into logger["losses/loss"]
+        """
+        self.encoder.train()
+        self.predictor.train()
+        self.label_encoder.train()
+
+        self.logger.reset("losses/train_loss")
 
         for batch in train_loader:
-            batch : dict[str, torch.Tensor]
-            current_observations = batch["current_observations"].to(self.device)
-            actions = batch["actions"].to(self.device)
-            next_observations = batch["next_observations"].to(self.device)
+            current_observations, actions, next_observations = self.extract_batch(batch)
 
-            encoding = self.encoder(current_observations)
-            prediction = self.predictor(encoding, actions)
-
-            encoded_label = self.label_encoder(next_observations)
-
-            loss = self.criterion(prediction, encoded_label)
+            _, _, _, loss = self.forward(current_observations, actions, next_observations)
 
             self.encoder_optimiser.zero_grad()
             self.predictor_optimiser.zero_grad()
@@ -70,19 +128,36 @@ class JEPA(Algorithm):
             self.encoder_optimiser.step()
             self.predictor_optimiser.step()
 
-            # Logging and stats
             with torch.no_grad():
+                # Update label encoder weights with EMA
+                for input_parameter, label_parameter in zip(self.label_encoder.parameters(), self.encoder.parameters()):
+                    # Lerp is the same as EMA
+                    label_parameter.lerp_(input_parameter, self.hyperparameters.label_encoder_ema_momentum)
+
+                # Logging and stats
                 batch_length = current_observations.size(0)
                 total_samples = len(train_loader.dataset) # type: ignore
                 self.logger.sum_log_data({
-                    "losses/loss": loss.item() * batch_length / total_samples
+                    "losses/train_loss": loss.item() * batch_length / total_samples
                 })
 
-        self.logger.log_data("losses/loss", "epoch")
-        self.logger.reset("losses/loss")
+    def evaluate(self, validation_loader : DataLoader[DatasetSA]):
+        self.encoder.eval()
+        self.predictor.eval()
+        self.label_encoder.eval()
+
+        self.logger.reset("losses/validation_loss")
+
+        with torch.no_grad():
+            for batch in validation_loader:
+                current_observations, actions, next_observations = self.extract_batch(batch)
+                _, _, _, loss = self.forward(current_observations, actions, next_observations)
+
+                # Logging and stats
+                batch_length = current_observations.size(0)
+                total_samples = len(validation_loader.dataset)  # type: ignore
+                self.logger.sum_log_data({
+                    "losses/validation_loss": loss.item() * batch_length / total_samples
+                })
 
 
-    def train(self):
-
-        for epoch in tqdm(range(self.hyperparameters.epochs)):
-            self.train_single_epoch(DataLoader(self.dataset))

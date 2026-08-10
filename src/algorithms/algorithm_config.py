@@ -1,20 +1,20 @@
 from abc import ABC
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Annotated, Union
+from pydantic import Field
 
-from src.algorithms.validation_method_config import ValidationMethodConfig, TrainValidationConfig
+from src.algorithms.validation_method_config import ValidationMethodConfig, TrainValidationConfig, KFoldValidationConfig
 
+
+AnyValidationConfig = Annotated[
+    Union[TrainValidationConfig, KFoldValidationConfig, ValidationMethodConfig],
+    Field(discriminator='method')
+]
 
 @dataclass
 class AlgorithmConfig:
     epochs: int = 1_000_000
-    validation_method_config: ValidationMethodConfig = TrainValidationConfig()
+    batch_size = 64
+    validation_method_config: AnyValidationConfig = field(default_factory=TrainValidationConfig)
 
-
-@dataclass
-class JepaConfig(AlgorithmConfig):
-    encoder_lr : float = 0.01
-    predictor_lr : float = 0.01
-    label_predictor_gamma : float = 0.99
-    encoder_regularization : float = 0
-    predictor_regularization : float = 0
 
