@@ -1,143 +1,92 @@
 import argparse
 import functools
 import os
+from pathlib import Path
 
 import torch
-from tqdm.auto import tqdm
 from datetime import datetime
 
-from rl_commons.config import RunInfo
-from rl_commons.execution import gridsearch, BaseTrainer, run_one
-from rl_commons.mdp import MdpTerminationState
+from ml_commons.config import RunInfo
+from ml_commons.execution import gridsearch, run_one
+from rl_commons.execution import BaseTrainer as BaseTrainerRL
+from rl_commons.mdp import MdpConfig
+
+from src.algorithms import Algorithm
+from src.algorithms.algorithm_factory import create_algorithm
 from src.config import RunConfig, load_config, load_grid_configs
-from src.algorithms import PPO
-from src.algorithms.policies import PolicyFactory
+
+from src.datasets.dataset_sa import DatasetSA
 
 
-class Trainer(BaseTrainer):
+class Trainer(BaseTrainerRL):
 
-    def __init__(self, run_info: RunInfo, run_config: RunConfig,
-                 logging=True, save_policy=False, record=False):
+    def __init__(self, run_info: RunInfo, run_config: RunConfig, dataset_path : str,
+                 logging=True, save_policy=False):
         super().__init__(
             run_info=run_info,
             run_config=run_config,
             mdp_config=run_config.mdp,
             entity="kieranparanjpe-mcgill-university",
-            project="RL_Project1",
-            log_elements={
-                "charts/episodic_return": 0.0,
-                "charts/episode_length": 0,
-                "global_step": 0,
-            },
-            logging=logging,
-            record=record,
-            total_timesteps=run_config.algorithm.n_timesteps,
+            project="World-Model-Sandbox",
+            log_elements={},
+            logging=logging
         )
 
-        self._should_save_policy = save_policy
-        if self._should_save_policy:
-            self._create_policy_folder()
+        self._dataset = DatasetSA(Path(dataset_path))
 
-        self.policy = PolicyFactory.build_policy(
-            self._run_info.policy_id,
-            self._mdp.obs_dimension,
-            self._mdp.action_dimension,
-            run_config.policy,
-        ).to(self.device)
+        self.algorithm : Algorithm = create_algorithm(self._run_info.algorithm_id,
+                                          hyperparameters=self._run_config.algorithm,
+                                          run_info=self._run_info,
+                                          obs_dimension=self._mdp.obs_dimension,
+                                          action_dimension=self._mdp.action_dimension,
+                                          dataset=self._dataset,
+                                          logger=self._logger,
+                                          device=self.device,
+                                          should_save_models=save_policy)
 
-        if self._run_info.algorithm_id == 'ppo':
-            self.algorithm = PPO(
-                run_config.algorithm, self.policy,
-                self._mdp.obs_dimension, self._mdp.action_dimension, self._mdp.discrete,
-                logger=self._logger, device=self.device,
-                value_fn_config=run_config.value_fn,
-            )
-
-    def _create_policy_folder(self):
-        directory_path = self._run_info.local_folder_path("saved_policies")
-        os.makedirs(directory_path, exist_ok=True)
-        return directory_path
-
-    def _save_policy(self, timestep):
-        n_timesteps = self._run_config.algorithm.n_timesteps
-        width = len(str(n_timesteps))
-        save_dict = {"policy": self.policy.state_dict()}
-        if (stats := self._mdp.obs_rms_stats) is not None:
-            save_dict["norm_stats"] = {
-                "obs_mean": torch.tensor(stats[0]),
-                "obs_var": torch.tensor(stats[1]),
-            }
-        torch.save(save_dict, f'{self._run_info.local_folder_path("saved_policies")}/policy_{timestep:0{width}d}.pth')
 
     def run(self):
-        last_observation = self._mdp.reset()
-        episode_number = 0
-        n_timesteps = self._run_config.algorithm.n_timesteps
-        for timestep in tqdm(range(n_timesteps)):
-            action, log_prob_action = self.algorithm.sample_action(last_observation)
-
-            next_observation, reward, termination_state = self._mdp.step(action)
-
-            updated_policy = self.algorithm.update_and_observe(last_observation, next_observation, action,
-                                                               log_prob_action, reward,
-                                                               termination_state, timestep)
-
-            if ((updated_policy and self._should_save_policy and episode_number % 500 == 0) or
-                    timestep == n_timesteps - 1):
-                self._save_policy(timestep)
-
-            self._logger.sum_log_data({
-                "charts/episodic_return": reward,
-                "charts/episode_length": 1,
-            })
-            if termination_state is not MdpTerminationState.IN_PROGRESS:
-                last_observation = self._mdp.reset()
-
-                self._logger.set_log_data({"global_step": timestep})
-                self._logger.log_data("charts/episodic_return", "charts/episode_length", "global_step")
-                self._logger.reset("charts/episodic_return", "charts/episode_length")
-
-                self._recorder.new_episode = True
-                episode_number += 1
-
-            else:
-                last_observation = next_observation
-
-                self._recorder.new_episode = False
-
-        self._mdp.close()
-        self._logger.upload_videos(self._recorder)
+        self.algorithm.train()
         self._logger.finish()
 
 
 def parse_args():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--environment", "-e", help="Environment Id to run", default="CartPole-v1")
-    parser.add_argument("--algorithm", "-a", help="Algorithm to use", default="ppo")
-    parser.add_argument("--policy", "-p", help="Policy Id to use", default="categorical")
+    parser.add_argument("--environment", "-e", help="Environment Id to run", default="LunarLander-v3")
+    parser.add_argument("--algorithm", "-a", help="Algorithm to use", default="jepa")
+    parser.add_argument("--dataset", "-d", help="Path to dataset")
     parser.add_argument("--hyperparameters", help="Path to hyperparameter json file", default=None)
     parser.add_argument("--grid", help="Path to hyperparameter grid json file", default=None)
-
     parser.add_argument("--log", "-l", help="Enable log to wandb", action="store_true")
     parser.add_argument("--save", "-s", help="Enable policy saving after each update", action="store_true")
-    parser.add_argument("--record", "-r", help="Enable episode recording", action="store_true")
 
     return parser.parse_args()
 
+
+def make_trainer(run_config, index, args, now):
+    run_info = RunInfo(
+        task_id=args.environment,
+        algorithm_id=args.algorithm,
+        grid_index=index,
+        time=now,
+    )
+    return Trainer(run_info, run_config, dataset_path=args.dataset, logging=args.log, save_policy=args.save)
 
 def main():
     args = parse_args()
     now = datetime.now()
 
-    factory = functools.partial(Trainer, logging=args.log, save_policy=args.save, record=args.record)
-    _run_one = functools.partial(run_one, args=args, now=now, trainer_factory=factory)
+    _run_one = functools.partial(
+        run_one,
+        trainer_factory=functools.partial(make_trainer, args=args, now=now)
+    )
 
     if args.grid is not None:
-        configs = load_grid_configs(args.grid, args.algorithm, args.policy)
+        configs = load_grid_configs(args.grid, args.algorithm)
         gridsearch(_run_one, configs)
     elif args.hyperparameters is not None:
-        _run_one(load_config(args.hyperparameters, args.algorithm, args.policy), None)
+        _run_one(load_config(args.hyperparameters, args.algorithm), None)
     else:
         _run_one(RunConfig(), None)
 
