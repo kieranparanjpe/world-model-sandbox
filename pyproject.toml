@@ -5,10 +5,13 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "ml-commons",
     "rl-commons",
+    "scikit-learn>=1.9.0",
     "torch>=2.13.0",
     "tqdm>=4.70.0",
 ]
 
 [tool.uv.sources]
 rl-commons = { git = "https://github.com/kieranparanjpe/rl-commons.git" }
+ml-commons = { git = "https://github.com/kieranparanjpe/ml-commons.git" }
