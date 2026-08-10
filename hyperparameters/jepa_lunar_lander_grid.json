@@ -1,0 +1,26 @@
+{
+  "algorithm": {
+    "epochs": [150],
+    "batch_size": [512],
+    "encoder_lr": [0.003],
+    "predictor_lr": [0.003],
+    "label_encoder_ema_momentum": [0.99],
+    "encoder_regularization": [0.01, 0.1],
+    "predictor_regularization": [0.01, 0.1],
+    "validation_method_config": [{
+      "method": "train-validation",
+      "train_size_p" : 0.8
+    }],
+    "encoder_config": [{
+      "hidden_sizes": [64, 64],
+      "activation": "relu",
+      "encoding_space_size": 128
+    }],
+    "predictor_config": [{
+      "hidden_sizes": [64, 64],
+      "activation": "relu",
+      "encoding_space_size": 128
+    }]
+  }
+}
+
