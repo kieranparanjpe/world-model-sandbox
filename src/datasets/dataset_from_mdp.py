@@ -48,6 +48,8 @@ class DatasetFromMDP:
             else:
                 last_observation = next_observation
 
+        self._mdp.close()
+
     def save(self):
         file_path = Path(self._output_path)
         file_path.parent.mkdir(parents=True, exist_ok=True)
@@ -67,7 +69,7 @@ def main():
 
     mdp = MdpGym(args.environment, torch.device("cpu"))
 
-    dataset_from_mdp = DatasetFromMDP(mdp, args.timesteps, args.environment)
+    dataset_from_mdp = DatasetFromMDP(mdp, int(args.timesteps), args.environment)
     dataset_from_mdp.collect()
     dataset_from_mdp.save()
 
