@@ -21,9 +21,9 @@ class NetworkConfig:
         """Build a MLP trunk (no output head). Returns (sequential, output_size)."""
         activation_function = ACTIVATION_MAP[self.activation]
         layers: list[torch.nn.Module] = []
-        in_size = input_size
+        in_size = int(input_size)
         for h in self.hidden_sizes:
-            layers.append(torch.nn.Linear(in_size, h))
+            layers.append(torch.nn.Linear(in_size, int(h)))
             layers.append(activation_function())
-            in_size = h
+            in_size = int(h)
         return torch.nn.Sequential(*layers), in_size

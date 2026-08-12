@@ -5,8 +5,8 @@
     "encoder_lr": [0.003],
     "predictor_lr": [0.003],
     "label_encoder_ema_momentum": [0.99],
-    "encoder_regularization": [0.01, 0.1],
-    "predictor_regularization": [0.01, 0.1],
+    "encoder_regularization": [1e-7, 1e-5],
+    "predictor_regularization": [1e-7, 1e-5],
     "validation_method_config": [{
       "method": "train-validation",
       "train_size_p" : 0.8

@@ -12,7 +12,9 @@ from torch.utils.data import DataLoader
 from src.algorithms import Algorithm
 from src.algorithms.jepa.encoder import Encoder
 from src.algorithms.jepa.jepa_config import JepaConfig
+from src.algorithms.jepa.jepa_model import JEPAModel
 from src.algorithms.jepa.predictor import Predictor
+from src.algorithms.utils import save_model
 from src.datasets.dataset_sa import DatasetSA
 
 def jepa_factory(hyperparameters : JepaConfig,
@@ -31,9 +33,8 @@ def jepa_factory(hyperparameters : JepaConfig,
 
 
 class JEPA(Algorithm):
-    encoder: nn.Module
-    predictor: nn.Module
-    label_encoder: nn.Module
+    model: JEPAModel
+    label_encoder: Encoder
 
     encoder_optimiser: torch.optim.Optimizer
     predictor_optimiser: torch.optim.Optimizer
@@ -44,8 +45,8 @@ class JEPA(Algorithm):
     def __init__(self, hyperparameters : JepaConfig,
                  run_info : RunInfo,
                  obs_dimension: int,
-                 encoder_factory : Callable[[], nn.Module],
-                 predictor_factory : Callable[[], nn.Module],
+                 encoder_factory : Callable[[], Encoder],
+                 predictor_factory : Callable[[], Predictor],
                  dataset : DatasetSA,
                  logger: Optional[Logger] = None,
                  device: torch.device = torch.device('cpu'),
@@ -60,14 +61,13 @@ class JEPA(Algorithm):
 
     # noinspection PyAttributeOutsideInit
     def reset_models(self):
-        self.encoder = self.encoder_factory()
-        self.predictor = self.predictor_factory()
-        self.label_encoder = copy.deepcopy(self.encoder)
+        self.model = JEPAModel(self.encoder_factory(), self.predictor_factory())
+        self.label_encoder = copy.deepcopy(self.model.encoder)
 
-        self.encoder_optimiser = optim.Adam(self.encoder.parameters(),
+        self.encoder_optimiser = optim.Adam(self.model.encoder.parameters(),
                                             lr=self.hyperparameters.encoder_lr,
                                             weight_decay=self.hyperparameters.encoder_regularization)
-        self.predictor_optimiser = optim.Adam(self.predictor.parameters(),
+        self.predictor_optimiser = optim.Adam(self.model.predictor.parameters(),
                                               lr=self.hyperparameters.predictor_lr,
                                               weight_decay=self.hyperparameters.predictor_regularization)
 
@@ -76,23 +76,13 @@ class JEPA(Algorithm):
             param.requires_grad = False
 
     def save_models(self, current_epoch : int):
-        encoder_path = self.run_info.local_folder_path("saved_networks/jepa/encoders")
-        os.makedirs(encoder_path, exist_ok=True)
-        predictor_path = self.run_info.local_folder_path("saved_networks/jepa/predictors")
-        os.makedirs(predictor_path, exist_ok=True)
+        model_path = self.run_info.local_folder_path("saved_networks/jepa/model")
+        os.makedirs(model_path, exist_ok=True)
 
-        epochs = self.hyperparameters.epochs
-        width = len(str(epochs))
-
-        torch.save(self.encoder.state_dict(),
-                   f'{encoder_path}/encoder_{current_epoch:0{width}d}.pth')
-        torch.save(self.encoder.state_dict(),
-                   f'{predictor_path}/predictor_{current_epoch:0{width}d}.pth')
-
+        save_model(self.model, model_path, current_epoch, self.hyperparameters.epochs, "model")
 
     def forward(self, current_observations, actions, next_observations):
-        encoding = self.encoder(current_observations)
-        prediction = self.predictor(encoding, actions)
+        prediction, encoding = self.model.forward(current_observations, actions)
 
         encoded_label = self.label_encoder(next_observations)
 
@@ -109,8 +99,7 @@ class JEPA(Algorithm):
         """
         Side effect: places loss into logger["losses/loss"]
         """
-        self.encoder.train()
-        self.predictor.train()
+        self.model.train()
         self.label_encoder.train()
 
         self.logger.reset("losses/train_loss")
@@ -120,8 +109,7 @@ class JEPA(Algorithm):
 
             _, _, _, loss = self.forward(current_observations, actions, next_observations)
 
-            self.encoder_optimiser.zero_grad()
-            self.predictor_optimiser.zero_grad()
+            self.model.zero_grad()
 
             loss.backward()
 
@@ -130,7 +118,8 @@ class JEPA(Algorithm):
 
             with torch.no_grad():
                 # Update label encoder weights with EMA
-                for input_parameter, label_parameter in zip(self.label_encoder.parameters(), self.encoder.parameters()):
+                for input_parameter, label_parameter in zip(self.label_encoder.parameters(),
+                                                            self.model.encoder.parameters()):
                     # Lerp is the same as EMA
                     label_parameter.lerp_(input_parameter, self.hyperparameters.label_encoder_ema_momentum)
 
@@ -142,8 +131,7 @@ class JEPA(Algorithm):
                 })
 
     def evaluate(self, validation_loader : DataLoader[DatasetSA]):
-        self.encoder.eval()
-        self.predictor.eval()
+        self.model.eval()
         self.label_encoder.eval()
 
         self.logger.reset("losses/validation_loss")

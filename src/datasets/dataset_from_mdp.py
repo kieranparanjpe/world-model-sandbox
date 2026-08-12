@@ -7,6 +7,9 @@ from tqdm.auto import tqdm
 from pathlib import Path
 import torch
 
+from src.mdp.utils import get_action_sampler
+
+
 class DatasetFromMDP:
 
     def __init__(self, mdp : Mdp, timesteps : int, mdp_id : str):
@@ -15,7 +18,7 @@ class DatasetFromMDP:
         time = f"{datetime.now():%Y-%m-%d-%H-%M-%S}"
         self._output_path = Path(__file__).resolve().parents[2] / "datasets" / mdp_id / f"dataset_{time}.pt"
 
-        self._action_sampler = self.init_action_sampler()
+        self._action_sampler = get_action_sampler(self._mdp)
 
         self._dataset = {
             "current_observations" : torch.zeros((timesteps, self._mdp.obs_dimension), dtype=torch.float32,
@@ -26,27 +29,22 @@ class DatasetFromMDP:
                                                  device=torch.device("cpu"))
         }
 
-    def init_action_sampler(self):
-        if self._mdp.discrete:
-            return torch.distributions.Categorical(logits=torch.ones(self._mdp.action_dimension))
-        else:
-            return torch.distributions.Uniform(low=self._mdp.action_range[:, 0], high=self._mdp.action_range[:, 1])
-
     def collect(self):
         last_observation = self._mdp.reset()
 
-        for timestep in tqdm(range(self._timesteps)):
-            action = self._action_sampler.sample()
-            next_observation, _, termination_state = self._mdp.step(action)
+        with torch.no_grad():
+            for timestep in tqdm(range(self._timesteps)):
+                action = self._action_sampler.sample()
+                next_observation, _, termination_state = self._mdp.step(action)
 
-            self._dataset["current_observations"][timestep] = last_observation
-            self._dataset["next_observations"][timestep] = next_observation
-            self._dataset["actions"][timestep] = action
+                self._dataset["current_observations"][timestep] = last_observation
+                self._dataset["next_observations"][timestep] = next_observation
+                self._dataset["actions"][timestep] = action
 
-            if termination_state is not MdpTerminationState.IN_PROGRESS:
-                last_observation = self._mdp.reset()
-            else:
-                last_observation = next_observation
+                if termination_state is not MdpTerminationState.IN_PROGRESS:
+                    last_observation = self._mdp.reset()
+                else:
+                    last_observation = next_observation
 
         self._mdp.close()
 

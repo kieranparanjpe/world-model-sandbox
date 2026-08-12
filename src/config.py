@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from ml_commons.config import ConfigLoader
+from ml_commons.config import ConfigLoader, RunInfo
 
 # Re-export so callers that import RunInfo/ConfigLoader from src.config continue to work.
 __all__ = ["RunConfig", "load_config", "load_grid_configs"]
@@ -11,11 +11,22 @@ from rl_commons.mdp import MdpConfig
 
 from src.algorithms.algorithm_config import AlgorithmConfig
 from src.algorithms.jepa.jepa_config import JepaConfig
+from src.algorithms.jepa_decoder.jepa_decoder_config import JepaDecoderConfig
 
 _ALGORITHM_REGISTRY: dict[str, type[AlgorithmConfig]] = {
     "base": AlgorithmConfig,
     "jepa": JepaConfig,
+    "jepa_decoder": JepaDecoderConfig
 }
+
+@dataclass
+class RunInfoSupervised(RunInfo):
+    dataset : str
+
+    def tags(self) -> list[str]:
+        return [self.algorithm_id, self.task_id, self.dataset]
+
+
 
 
 @dataclass

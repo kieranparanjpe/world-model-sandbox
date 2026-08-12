@@ -13,14 +13,15 @@ from rl_commons.mdp import MdpConfig
 
 from src.algorithms import Algorithm
 from src.algorithms.algorithm_factory import create_algorithm
-from src.config import RunConfig, load_config, load_grid_configs
+from src.config import RunConfig, load_config, load_grid_configs, RunInfoSupervised
+from src.datasets.dataset_factory import create_dataset
 
 from src.datasets.dataset_sa import DatasetSA
 
 
 class Trainer(BaseTrainerRL):
 
-    def __init__(self, run_info: RunInfo, run_config: RunConfig, dataset_path : str,
+    def __init__(self, run_info: RunInfoSupervised, run_config: RunConfig, dataset_path : str, dataset_type : str,
                  logging=True, save_policy=False):
         super().__init__(
             run_info=run_info,
@@ -32,7 +33,7 @@ class Trainer(BaseTrainerRL):
             logging=logging
         )
 
-        self._dataset = DatasetSA(Path(dataset_path))
+        self._dataset = create_dataset(dataset_type, path=Path(dataset_path))
 
         self.algorithm : Algorithm = create_algorithm(self._run_info.algorithm_id,
                                           hyperparameters=self._run_config.algorithm,
@@ -60,18 +61,21 @@ def parse_args():
     parser.add_argument("--grid", help="Path to hyperparameter grid json file", default=None)
     parser.add_argument("--log", "-l", help="Enable log to wandb", action="store_true")
     parser.add_argument("--save", "-s", help="Enable policy saving after each update", action="store_true")
+    parser.add_argument("--dataset_type", "-dt", help="dataset type", default="sa")
 
     return parser.parse_args()
 
 
 def make_trainer(run_config, index, args, now):
-    run_info = RunInfo(
+    run_info = RunInfoSupervised(
         task_id=args.environment,
+        dataset=args.dataset,
         algorithm_id=args.algorithm,
         grid_index=index,
         time=now,
     )
-    return Trainer(run_info, run_config, dataset_path=args.dataset, logging=args.log, save_policy=args.save)
+    return Trainer(run_info, run_config, dataset_path=args.dataset, logging=args.log, save_policy=args.save,
+                   dataset_type=args.dataset_type)
 
 def main():
     args = parse_args()

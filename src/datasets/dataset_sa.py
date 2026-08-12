@@ -8,9 +8,9 @@ class DatasetSA(Dataset):
 
     def __init__(self, path : pathlib.Path):
         dataset_dict = torch.load(path, weights_only=True)
-        self.current_observations : torch.Tensor = dataset_dict["current_observations"]
-        self.actions : torch.Tensor = dataset_dict["actions"]
-        self.next_observations : torch.Tensor = dataset_dict["next_observations"]
+        self.current_observations : torch.Tensor = dataset_dict["current_observations"].detach()
+        self.actions : torch.Tensor = dataset_dict["actions"].detach()
+        self.next_observations : torch.Tensor = dataset_dict["next_observations"].detach()
 
         if len(self.current_observations) != len(self.actions) != len(self.next_observations):
             raise ValueError("Observation and action length mismatch.")

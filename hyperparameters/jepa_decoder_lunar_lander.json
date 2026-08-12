@@ -1,0 +1,18 @@
+{
+  "algorithm": {
+    "epochs": 150,
+    "batch_size": 512,
+    "decoder_lr": 0.003,
+    "decoder_regularization": 0,
+    "validation_method_config": {
+      "method": "train-validation",
+      "train_size_p" : 0.8
+    },
+    "decoder": {
+      "hidden_sizes": [64, 64],
+      "activation": "relu",
+      "encoding_space_size": 128
+    }
+  }
+}
+
