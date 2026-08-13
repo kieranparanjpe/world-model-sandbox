@@ -1,4 +1,4 @@
-from src.algorithms.network_config import NetworkConfig
+from ml_commons.networks import NetworkConfig
 
 
 class DecoderConfig(NetworkConfig):
