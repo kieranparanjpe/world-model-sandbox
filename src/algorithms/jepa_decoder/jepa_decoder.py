@@ -4,7 +4,7 @@ from typing import Optional, Callable
 
 import torch
 from ml_commons.config import RunInfo
-from ml_commons.log import Logger
+from ml_commons.log import Logger, NullLogger
 from torch import nn, optim
 from torch.utils.data import DataLoader
 
@@ -23,8 +23,7 @@ def jepa_decoder_factory(hyperparameters : JepaDecoderConfig,
                  logger : Optional[Logger],
                  device: torch.device = torch.device('cpu'),
                  should_save_models=False):
-    decoder_factory = lambda : Decoder(obs_dimension, hyperparameters.decoder_config)
-
+    decoder_factory = lambda: Decoder(obs_dimension, hyperparameters.decoder_config)
     return JEPADecoder(hyperparameters, run_info, obs_dimension, decoder_factory, dataset, logger, device,
                 should_save_models)
 
@@ -42,7 +41,7 @@ class JEPADecoder(Algorithm):
                  obs_dimension: int,
                  decoder_factory : Callable[[], Decoder],
                  dataset : DatasetEncoder,
-                 logger: Optional[Logger] = None,
+                 logger: Logger = NullLogger(),
                  device: torch.device = torch.device('cpu'),
                  should_save_models=False):
         super().__init__(hyperparameters, run_info, obs_dimension, dataset, logger, device, should_save_models)
@@ -64,8 +63,10 @@ class JEPADecoder(Algorithm):
         model_path = self.run_info.local_folder_path("saved_networks/jepa/decoder")
         os.makedirs(model_path, exist_ok=True)
 
-        save_model(self.decoder, model_path, current_epoch, self.hyperparameters.epochs, "decoder")
+        width = len(str(self.hyperparameters.epochs))
 
+        self.decoder.save(f'{model_path}/decoder_{current_epoch:0{width}d}.pt',
+                          norm_stats=self.dataset.get_norm_stats())
 
     def train_single_epoch(self, train_loader : DataLoader[DatasetEncoder]):
         """

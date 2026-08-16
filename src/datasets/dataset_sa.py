@@ -16,14 +16,22 @@ class DatasetSA(Dataset):
             raise ValueError("Observation and action length mismatch.")
 
     def normalise_actions(self):
-        self.actions.subtract_(self.actions.mean(dim=0)).divide_(self.actions.std(dim=0) + 1e-8)
+        norm_stats = self.get_norm_stats()
+        self.actions.subtract_(norm_stats["action_mean"]).divide_(norm_stats["action_std"])
 
     def normalise_observations(self):
-        offset = self.current_observations.mean(dim=0)
-        scale = self.current_observations.std(dim=0) + 1e-8
+        norm_stats = self.get_norm_stats()
 
-        self.current_observations.subtract_(offset).divide_(scale)
-        self.next_observations.subtract_(offset).divide_(scale)
+        self.current_observations.subtract_(norm_stats["obs_mean"]).divide_(norm_stats["obs_std"])
+        self.next_observations.subtract_(norm_stats["obs_mean"]).divide_(norm_stats["obs_std"])
+
+    def get_norm_stats(self):
+        return {
+            "obs_mean": self.current_observations.mean(dim=0),
+            "obs_std": self.current_observations.std(dim=0) + 1e-8,
+            "action_mean": self.actions.mean(dim=0),
+            "action_std": self.actions.std(dim=0) + 1e-8
+        }
 
     def __len__(self):
         return len(self.current_observations)

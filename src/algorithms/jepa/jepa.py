@@ -79,7 +79,10 @@ class JEPA(Algorithm):
         model_path = self.run_info.local_folder_path("saved_networks/jepa/model")
         os.makedirs(model_path, exist_ok=True)
 
-        save_model(self.model, model_path, current_epoch, self.hyperparameters.epochs, "model")
+        width = len(str(self.hyperparameters.epochs))
+
+        self.model.save(f'{model_path}/model_{current_epoch:0{width}d}.pt',
+                        norm_stats=self.dataset.get_norm_stats())
 
     def forward(self, current_observations, actions, next_observations):
         prediction, encoding = self.model.forward(current_observations, actions)

@@ -59,9 +59,9 @@ def parse_args():
     parser.add_argument("--dataset", "-d", help="Path to dataset")
     parser.add_argument("--hyperparameters", help="Path to hyperparameter json file", default=None)
     parser.add_argument("--grid", help="Path to hyperparameter grid json file", default=None)
+    parser.add_argument("--dataset_type", "-dt", help="dataset type", default="sa")
     parser.add_argument("--log", "-l", help="Enable log to wandb", action="store_true")
     parser.add_argument("--save", "-s", help="Enable policy saving after each update", action="store_true")
-    parser.add_argument("--dataset_type", "-dt", help="dataset type", default="sa")
 
     return parser.parse_args()
 

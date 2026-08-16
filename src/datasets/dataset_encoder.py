@@ -15,10 +15,14 @@ class DatasetEncoder(Dataset):
             raise ValueError("X and Y length mismatch")
 
     def normalise_observations(self):
-        offset = self.raw_observations.mean(dim=0)
-        scale = self.raw_observations.std(dim=0) + 1e-8
+        norm_stats = self.get_norm_stats()
+        self.raw_observations.subtract_(norm_stats["mean"]).divide_(norm_stats["std"])
 
-        self.raw_observations.subtract_(offset).divide_(scale)
+    def get_norm_stats(self):
+        return {
+            "mean": self.raw_observations.mean(dim=0),
+            "std": self.raw_observations.std(dim=0) + 1e-8
+        }
 
     def __len__(self):
         return len(self.raw_observations)

@@ -4,7 +4,7 @@ from typing import Optional, Sized, cast
 import numpy as np
 import torch
 from ml_commons.config import RunInfo
-from ml_commons.log import Logger
+from ml_commons.log import Logger, NullLogger
 from sklearn.model_selection import KFold
 from torch.utils.data import Dataset, Subset, DataLoader
 from tqdm.auto import tqdm
@@ -19,7 +19,7 @@ class Algorithm(ABC):
                  run_info : RunInfo,
                  obs_dimension: int,
                  dataset : Dataset,
-                 logger: Optional[Logger] = None,
+                 logger: Logger = NullLogger(),
                  device: torch.device = torch.device('cpu'),
                  should_save_models=False):
         super().__init__()
