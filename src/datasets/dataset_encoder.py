@@ -5,6 +5,8 @@ import torch
 from ml_commons.stats import NormalisationStats
 from torch.utils.data import Dataset
 
+from src.datasets.norm_stats_keys import OBS_NORM_KEY
+
 
 class DatasetEncoder(Dataset):
 
@@ -21,12 +23,14 @@ class DatasetEncoder(Dataset):
             self.apply_obs_normalization(obs_norm)
 
     def apply_obs_normalization(self, norm : NormalisationStats):
+        if self._obs_norm is not None:
+            raise ValueError("Observation normalization has already been applied to this dataset.")
         mean, std = norm.as_tensors(dtype=self.raw_observations.dtype)
         self.raw_observations.subtract_(mean).divide_(std)
         self._obs_norm = norm
 
     def get_norm_stats(self) -> dict[str, NormalisationStats]:
-        return {"obs": self._obs_norm if self._obs_norm is not None else self._compute_obs_stats()}
+        return {OBS_NORM_KEY: self._obs_norm if self._obs_norm is not None else self._compute_obs_stats()}
 
     def _compute_obs_stats(self) -> NormalisationStats:
         return NormalisationStats(

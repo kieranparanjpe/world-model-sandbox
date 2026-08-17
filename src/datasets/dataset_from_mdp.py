@@ -22,11 +22,11 @@ class DatasetFromMDP:
 
         self._dataset = {
             "current_observations" : torch.zeros((timesteps, self._mdp.obs_dimension), dtype=torch.float32,
-                                                 device=torch.device("cpu")),
+                                                 device=self._mdp.device),
             "next_observations": torch.zeros((timesteps, self._mdp.obs_dimension), dtype=torch.float32,
-                                                 device=torch.device("cpu")),
+                                                 device=self._mdp.device),
             "actions": torch.zeros((timesteps, self._mdp.action_dimension), dtype=torch.float32,
-                                                 device=torch.device("cpu"))
+                                                 device=self._mdp.device)
         }
 
     def collect(self):
@@ -67,7 +67,8 @@ def parse_args():
 def main():
     args = parse_args()
 
-    mdp = MdpGym(args.environment, torch.device("cpu"), mdp_config=MdpConfig(normalise_obs=False))
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    mdp = MdpGym(args.environment, device, mdp_config=MdpConfig(normalise_obs=False))
 
     dataset_from_mdp = DatasetFromMDP(mdp, int(args.timesteps), args.environment)
     dataset_from_mdp.collect()

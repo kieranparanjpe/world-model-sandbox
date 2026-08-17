@@ -14,13 +14,16 @@ import torch
 from src.algorithms.jepa.encoder import Encoder
 from src.algorithms.jepa.jepa_model import JEPAModel
 from src.datasets.dataset_sa import DatasetSA
+from src.datasets.norm_stats_keys import OBS_NORM_KEY
 
 
 class DatasetFromEncoder:
 
     def __init__(self, datasetSA : DatasetSA, encoder : Encoder, task_id : str,
-                 obs_norm : Optional[NormalisationStats] = None):
-        self._encoder = encoder
+                 obs_norm : Optional[NormalisationStats] = None,
+                 device : Optional[torch.device] = None):
+        self.device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self._encoder = encoder.to(self.device)
         self._datasetSA = datasetSA
         self._obs_norm = obs_norm
 
@@ -29,9 +32,9 @@ class DatasetFromEncoder:
 
         self._dataset = {
             "encodings" : torch.zeros((len(self._datasetSA), self._encoder.config.encoding_space_size), dtype=torch.float32,
-                                                 device=torch.device("cpu")),
+                                                 device=self.device),
             "raw_observations": torch.zeros((len(self._datasetSA), self._encoder.input_size), dtype=torch.float32,
-                                                 device=torch.device("cpu")),
+                                                 device=self.device),
         }
 
     def collect(self):
@@ -40,11 +43,11 @@ class DatasetFromEncoder:
 
         mean, std = None, None
         if self._obs_norm is not None:
-            mean, std = self._obs_norm.as_tensors(dtype=torch.float32)
+            mean, std = self._obs_norm.as_tensors(dtype=torch.float32, device=self.device)
 
         with torch.no_grad():
             for idx, batch in tqdm(enumerate(dataloader)):
-                observations = batch["current_observations"]
+                observations = batch["current_observations"].to(self.device)
                 encoder_input = observations if mean is None else (observations - mean) / std
                 encodings = self._encoder(encoder_input)
                 start = idx * batch_size
@@ -75,7 +78,7 @@ def main():
     model, norm_stats = JEPAModel.load(args.model)
 
     dataset_from_encoder = DatasetFromEncoder(datasetSA, model.encoder, args.environment,
-                                              obs_norm=norm_stats.get("obs") if norm_stats else None)
+                                              obs_norm=norm_stats.get(OBS_NORM_KEY) if norm_stats else None)
     dataset_from_encoder.collect()
     dataset_from_encoder.save()
 

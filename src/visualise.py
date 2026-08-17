@@ -8,6 +8,9 @@ from torch import nn
 from src.mdp.mdp_gym_writable import MdpGymWritable
 from src.mdp.utils import get_random_policy
 
+POLICY_OBS_NORM_KEY = "policy_obs"
+WORLD_MODEL_OBS_NORM_KEY = "world_model_obs"
+
 
 class Visualise:
     def __init__(self):
@@ -35,9 +38,9 @@ class Visualiser:
         norm_stats = norm_stats or {}
 
         self._mdp_main = MdpGym(mdp_id, device=self.device, mdp_config=mdp_config,
-                                obs_rms_stats=norm_stats.get("policy_obs"), render_mode="human")
+                                obs_rms_stats=norm_stats.get(POLICY_OBS_NORM_KEY), render_mode="human")
         self._mdp_writable = MdpGymWritable(mdp_id, device=self.device, mdp_config=mdp_config,
-                                            obs_rms_stats=norm_stats.get("world_model_obs"), render_mode="human")
+                                            obs_rms_stats=norm_stats.get(WORLD_MODEL_OBS_NORM_KEY), render_mode="human")
 
         self.model = model
         self.decoder = decoder
