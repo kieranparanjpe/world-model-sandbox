@@ -7,7 +7,7 @@ requires-python = "==3.12.*"
 dependencies = [
     "ml-commons",
     "rl-commons",
-    "My-RL-Impl",
+    "my-rl-impl",
     "scikit-learn>=1.9.0",
     "torch>=2.12.0",
     "tqdm>=4.67.0",
@@ -16,7 +16,7 @@ dependencies = [
 [tool.uv.sources]
 rl-commons = { git = "https://github.com/kieranparanjpe/rl-commons.git" }
 ml-commons = { git = "https://github.com/kieranparanjpe/ml-commons.git" }
-My-RL-Impl = { git = "https://github.com/kieranparanjpe/My-RL-Impl.git" }
+my-rl-impl = { git = "https://github.com/kieranparanjpe/My-RL-Impl.git" }
 
 [build-system]
 requires = ["hatchling"]

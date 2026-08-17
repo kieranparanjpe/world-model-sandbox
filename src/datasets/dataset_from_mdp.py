@@ -2,12 +2,12 @@ import argparse
 from datetime import datetime
 
 import torch.distributions
-from rl_commons.mdp import Mdp, MdpTerminationState, MdpGym
+from rl_commons.mdp import Mdp, MdpTerminationState, MdpGym, MdpConfig
 from tqdm.auto import tqdm
 from pathlib import Path
 import torch
 
-from src.mdp.utils import get_action_sampler
+from src.mdp.utils import get_random_policy
 
 
 class DatasetFromMDP:
@@ -18,7 +18,7 @@ class DatasetFromMDP:
         time = f"{datetime.now():%Y-%m-%d-%H-%M-%S}"
         self._output_path = Path(__file__).resolve().parents[2] / "datasets" / mdp_id / f"dataset_{time}.pt"
 
-        self._action_sampler = get_action_sampler(self._mdp)
+        self._policy = get_random_policy(self._mdp)
 
         self._dataset = {
             "current_observations" : torch.zeros((timesteps, self._mdp.obs_dimension), dtype=torch.float32,
@@ -32,9 +32,11 @@ class DatasetFromMDP:
     def collect(self):
         last_observation = self._mdp.reset()
 
+        action_sampler = self._policy.forward(last_observation)
+
         with torch.no_grad():
             for timestep in tqdm(range(self._timesteps)):
-                action = self._action_sampler.sample()
+                action = self._policy.sample(action_sampler)
                 next_observation, _, termination_state = self._mdp.step(action)
 
                 self._dataset["current_observations"][timestep] = last_observation
@@ -65,7 +67,7 @@ def parse_args():
 def main():
     args = parse_args()
 
-    mdp = MdpGym(args.environment, torch.device("cpu"))
+    mdp = MdpGym(args.environment, torch.device("cpu"), mdp_config=MdpConfig(normalise_obs=False))
 
     dataset_from_mdp = DatasetFromMDP(mdp, int(args.timesteps), args.environment)
     dataset_from_mdp.collect()

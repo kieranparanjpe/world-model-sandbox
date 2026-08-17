@@ -5,6 +5,7 @@ from typing import Optional
 import torch
 from torch import nn
 from ml_commons.networks import SaveableNetwork
+from ml_commons.stats import NormalisationStats
 
 from src.algorithms.jepa_decoder.decoder_config import DecoderConfig
 
@@ -24,7 +25,7 @@ class Decoder(SaveableNetwork, nn.Module):
     def forward(self, observation: torch.Tensor) -> torch.Tensor:
         return self._head(self._net(observation))
 
-    def save(self, path, norm_stats=None):
+    def save(self, path, norm_stats: Optional[dict[str, NormalisationStats]] = None):
         save_dict = {
             "model": self.state_dict(),
             "config": self.config,
@@ -35,7 +36,7 @@ class Decoder(SaveableNetwork, nn.Module):
         torch.save(save_dict, path)
 
     @classmethod
-    def load(cls, path, map_location="cpu", **kwargs) -> tuple[Decoder, Optional[dict]]:
+    def load(cls, path, map_location="cpu", **kwargs) -> tuple[Decoder, Optional[dict[str, NormalisationStats]]]:
         checkpoint = torch.load(path, map_location=map_location, weights_only=True) if path else {}
         decoder: Decoder = Decoder(checkpoint["output_size"], checkpoint["config"])
 

@@ -5,6 +5,7 @@ from typing import Optional
 import torch
 import torch.nn as nn
 from ml_commons.networks import SaveableNetwork
+from ml_commons.stats import NormalisationStats
 
 from src.algorithms.jepa.encoder import Encoder
 from src.algorithms.jepa.predictor import Predictor
@@ -24,7 +25,7 @@ class JEPAModel(SaveableNetwork, nn.Module):
 
         return prediction, encoding
 
-    def save(self, path, norm_stats=None):
+    def save(self, path, norm_stats: Optional[dict[str, NormalisationStats]] = None):
         save_dict = {
             "model": self.state_dict(),
             "encoder_config": self.encoder.config,
@@ -37,7 +38,7 @@ class JEPAModel(SaveableNetwork, nn.Module):
         torch.save(save_dict, path)
 
     @classmethod
-    def load(cls, path, map_location="cpu", **kwargs) -> tuple[JEPAModel, Optional[dict]]:
+    def load(cls, path, map_location="cpu", **kwargs) -> tuple[JEPAModel, Optional[dict[str, NormalisationStats]]]:
         checkpoint = torch.load(path, map_location=map_location, weights_only=True) if path else {}
 
         encoder = Encoder(checkpoint["input_size"], checkpoint["encoder_config"])

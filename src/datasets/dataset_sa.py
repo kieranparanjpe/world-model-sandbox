@@ -1,12 +1,16 @@
 import pathlib
+from typing import Optional
 
 import torch
+from ml_commons.stats import NormalisationStats
 from torch.utils.data import Dataset
 
 
 class DatasetSA(Dataset):
 
-    def __init__(self, path : pathlib.Path):
+    def __init__(self, path : pathlib.Path,
+                 obs_norm : Optional[NormalisationStats] = None,
+                 action_norm : Optional[NormalisationStats] = None):
         dataset_dict = torch.load(path, weights_only=True)
         self.current_observations : torch.Tensor = dataset_dict["current_observations"].detach()
         self.actions : torch.Tensor = dataset_dict["actions"].detach()
@@ -15,23 +19,42 @@ class DatasetSA(Dataset):
         if len(self.current_observations) != len(self.actions) != len(self.next_observations):
             raise ValueError("Observation and action length mismatch.")
 
-    def normalise_actions(self):
-        norm_stats = self.get_norm_stats()
-        self.actions.subtract_(norm_stats["action_mean"]).divide_(norm_stats["action_std"])
+        self._obs_norm : Optional[NormalisationStats] = None
+        self._action_norm : Optional[NormalisationStats] = None
 
-    def normalise_observations(self):
-        norm_stats = self.get_norm_stats()
+        if obs_norm is not None:
+            self.apply_obs_normalization(obs_norm)
+        if action_norm is not None:
+            self.apply_action_normalization(action_norm)
 
-        self.current_observations.subtract_(norm_stats["obs_mean"]).divide_(norm_stats["obs_std"])
-        self.next_observations.subtract_(norm_stats["obs_mean"]).divide_(norm_stats["obs_std"])
+    def apply_obs_normalization(self, norm : NormalisationStats):
+        mean, std = norm.as_tensors(dtype=self.current_observations.dtype)
+        self.current_observations.subtract_(mean).divide_(std)
+        self.next_observations.subtract_(mean).divide_(std)
+        self._obs_norm = norm
 
-    def get_norm_stats(self):
+    def apply_action_normalization(self, norm : NormalisationStats):
+        mean, std = norm.as_tensors(dtype=self.actions.dtype)
+        self.actions.subtract_(mean).divide_(std)
+        self._action_norm = norm
+
+    def get_norm_stats(self) -> dict[str, NormalisationStats]:
         return {
-            "obs_mean": self.current_observations.mean(dim=0),
-            "obs_std": self.current_observations.std(dim=0) + 1e-8,
-            "action_mean": self.actions.mean(dim=0),
-            "action_std": self.actions.std(dim=0) + 1e-8
+            "obs": self._obs_norm if self._obs_norm is not None else self._compute_obs_stats(),
+            "action": self._action_norm if self._action_norm is not None else self._compute_action_stats(),
         }
+
+    def _compute_obs_stats(self) -> NormalisationStats:
+        return NormalisationStats(
+            mean=self.current_observations.mean(dim=0).numpy(),
+            var=self.current_observations.var(dim=0).numpy() + 1e-8,
+        )
+
+    def _compute_action_stats(self) -> NormalisationStats:
+        return NormalisationStats(
+            mean=self.actions.mean(dim=0).numpy(),
+            var=self.actions.var(dim=0).numpy() + 1e-8,
+        )
 
     def __len__(self):
         return len(self.current_observations)

@@ -1,9 +1,19 @@
-import torch
 from rl_commons.mdp import Mdp
+from rl_commons.policies import Policy
+from my_rl_impl.algorithms.policies import CategoricalPolicyConfig
+
+from mdp.uniform_policy import UniformPolicyConfig
 
 
-def get_action_sampler(_mdp : Mdp):
-    if _mdp.discrete:
-        return torch.distributions.Categorical(logits=torch.ones(_mdp.action_dimension))
+def get_random_policy(mdp : Mdp) -> Policy:
+    if mdp.discrete:
+        policy_id = "categorical"
+        policy_config = CategoricalPolicyConfig()
+        return Policy.build_policy(policy_id, mdp.obs_dimension, mdp.action_dimension, policy_config)
     else:
-        return torch.distributions.Uniform(low=_mdp.action_range[:, 0], high=_mdp.action_range[:, 1])
+        policy_id = "uniform"
+        policy_config = UniformPolicyConfig(action_range=(float(mdp.action_range[0][0]), float(mdp.action_range[0][1])))
+        return Policy.build_policy(policy_id, mdp.obs_dimension, mdp.action_dimension, policy_config)
+
+
+
