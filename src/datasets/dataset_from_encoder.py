@@ -14,7 +14,6 @@ import torch
 from src.algorithms.jepa.encoder import Encoder
 from src.algorithms.jepa.jepa_model import JEPAModel
 from src.datasets.dataset_sa import DatasetSA
-from src.datasets.norm_stats_keys import OBS_NORM_KEY
 
 
 class DatasetFromEncoder:
@@ -75,10 +74,10 @@ def main():
     args = parse_args()
 
     datasetSA = DatasetSA(args.dataset)
-    model, norm_stats = JEPAModel.load(args.model)
+    model = JEPAModel.load(args.model)
 
     dataset_from_encoder = DatasetFromEncoder(datasetSA, model.encoder, args.environment,
-                                              obs_norm=norm_stats.get(OBS_NORM_KEY) if norm_stats else None)
+                                              obs_norm=model.obs_norm_stats)
     dataset_from_encoder.collect()
     dataset_from_encoder.save()
 

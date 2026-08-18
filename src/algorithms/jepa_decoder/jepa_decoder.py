@@ -15,6 +15,7 @@ from src.algorithms.jepa_decoder.jepa_decoder_config import JepaDecoderConfig
 from src.algorithms.utils import save_model
 from src.datasets.dataset_encoder import DatasetEncoder
 from src.datasets.dataset_sa import DatasetSA
+from src.datasets.norm_stats_keys import OBS_NORM_KEY
 
 def jepa_decoder_factory(hyperparameters : JepaDecoderConfig,
                  run_info : RunInfo,
@@ -65,8 +66,8 @@ class JEPADecoder(Algorithm):
 
         width = len(str(self.hyperparameters.epochs))
 
-        self.decoder.save(f'{model_path}/decoder_{current_epoch:0{width}d}.pt',
-                          norm_stats=self.dataset.get_norm_stats())
+        self.decoder.obs_norm_stats = self.dataset.get_norm_stats()[OBS_NORM_KEY]
+        self.decoder.save(f'{model_path}/decoder_{current_epoch:0{width}d}.pt')
 
     def train_single_epoch(self, train_loader : DataLoader[DatasetEncoder]):
         """

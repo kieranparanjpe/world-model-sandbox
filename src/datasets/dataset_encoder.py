@@ -29,8 +29,13 @@ class DatasetEncoder(Dataset):
         self.raw_observations.subtract_(mean).divide_(std)
         self._obs_norm = norm
 
+    def normalise_obs(self):
+        """Compute obs stats from this dataset's current (raw) data, store them, and apply."""
+        self.apply_obs_normalization(self._compute_obs_stats())
+
     def get_norm_stats(self) -> dict[str, NormalisationStats]:
-        return {OBS_NORM_KEY: self._obs_norm if self._obs_norm is not None else self._compute_obs_stats()}
+        """Pure getter -- whatever's been applied, or identity if nothing has. Never computes."""
+        return {OBS_NORM_KEY: self._obs_norm if self._obs_norm is not None else NormalisationStats()}
 
     def _compute_obs_stats(self) -> NormalisationStats:
         return NormalisationStats(

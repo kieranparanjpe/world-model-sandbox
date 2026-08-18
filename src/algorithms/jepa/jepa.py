@@ -16,6 +16,7 @@ from src.algorithms.jepa.jepa_model import JEPAModel
 from src.algorithms.jepa.predictor import Predictor
 from src.algorithms.utils import save_model
 from src.datasets.dataset_sa import DatasetSA
+from src.datasets.norm_stats_keys import OBS_NORM_KEY, ACTION_NORM_KEY
 
 def jepa_factory(hyperparameters : JepaConfig,
                  run_info : RunInfo,
@@ -81,8 +82,10 @@ class JEPA(Algorithm):
 
         width = len(str(self.hyperparameters.epochs))
 
-        self.model.save(f'{model_path}/model_{current_epoch:0{width}d}.pt',
-                        norm_stats=self.dataset.get_norm_stats())
+        norm_stats = self.dataset.get_norm_stats()
+        self.model.obs_norm_stats = norm_stats[OBS_NORM_KEY]
+        self.model.action_norm_stats = norm_stats[ACTION_NORM_KEY]
+        self.model.save(f'{model_path}/model_{current_epoch:0{width}d}.pt')
 
     def forward(self, current_observations, actions, next_observations):
         prediction, encoding = self.model.forward(current_observations, actions)

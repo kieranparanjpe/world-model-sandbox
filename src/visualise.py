@@ -1,20 +1,18 @@
+from dataclasses import replace
 from typing import Optional
 
 from ml_commons.stats import NormalisationStats
-from rl_commons.mdp import MdpGym, MdpConfig
+from rl_commons.execution import BaseEvaluator
+from rl_commons.log import BaseRecorder, NullRecorder
+from rl_commons.mdp import MdpGym, MdpConfig, MdpTerminationState
 from rl_commons.policies import Policy
 from torch import nn
 
+from algorithms.jepa.jepa_model import JEPAModel
+from algorithms.jepa_decoder.decoder import Decoder
 from src.mdp.mdp_gym_writable import MdpGymWritable
 from src.mdp.utils import get_random_policy
 
-POLICY_OBS_NORM_KEY = "policy_obs"
-WORLD_MODEL_OBS_NORM_KEY = "world_model_obs"
-
-
-class Visualise:
-    def __init__(self):
-        pass
 
 import argparse
 import functools
@@ -25,55 +23,84 @@ import torch
 from datetime import datetime
 
 
+class Visualiser(BaseEvaluator):
 
+    def __init__(self, task_id: str, model_path: str, decoder_path: str,
+                 policy_id_path: Optional[tuple[str, str]] = None, mdp_config: MdpConfig = MdpConfig(),
+                 sync_reset: bool = False):
+        self._mdp_config = replace(mdp_config, normalise_obs=False, normalise_reward=False)
+        super().__init__(task_id, mdp_config=self._mdp_config)
 
-class Visualiser:
+        self.sync_reset = sync_reset
+        self._mdp_world_model = MdpGymWritable(task_id, device=self.device, mdp_config=self._mdp_config, render_mode="human")
 
-    def __init__(self, mdp_id : str, model : nn.Module, decoder : nn.Module,
-                 policy : Optional[Policy] = None,
-                 mdp_config : MdpConfig = MdpConfig(),
-                 norm_stats : Optional[dict[str, NormalisationStats]] = None):
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.model = JEPAModel.load(model_path, map_location=self.device)
+        self.decoder = Decoder.load(decoder_path, map_location=self.device)
 
-        norm_stats = norm_stats or {}
+        self.policy = Policy.load(policy_id_path[1],
+                                  map_location=self.device,
+                                  obs_dimension=self._mdp.obs_dimension,
+                                  action_dimension=self._mdp.action_dimension,
+                                  policy_id=policy_id_path[0]) \
+            if policy_id_path else get_random_policy(self._mdp)
 
-        self._mdp_main = MdpGym(mdp_id, device=self.device, mdp_config=mdp_config,
-                                obs_rms_stats=norm_stats.get(POLICY_OBS_NORM_KEY), render_mode="human")
-        self._mdp_writable = MdpGymWritable(mdp_id, device=self.device, mdp_config=mdp_config,
-                                            obs_rms_stats=norm_stats.get(WORLD_MODEL_OBS_NORM_KEY), render_mode="human")
+    def standardize(self, value: torch.Tensor, norm_stats: NormalisationStats) -> torch.Tensor:
+        return (value - norm_stats.mean_t(device=self.device)) / norm_stats.std_t(device=self.device)
 
-        self.model = model
-        self.decoder = decoder
+    def unstandardize(self, value: torch.Tensor, norm_stats: NormalisationStats):
+        return (value * norm_stats.mean_t(device=self.device)) + norm_stats.std_t(device=self.device)
 
-        self.policy = policy if policy else get_random_policy(self._mdp_main)
-
-    def visualise(self):
+    def _run(self):
         self.model.eval()
         self.decoder.eval()
 
-        last_observation_main = self._mdp_main.reset()
-        last_observation_writable = self._mdp_writable.reset()
+        last_observation_main = self._mdp.reset()
+        last_observation_writable = self._mdp_world_model.reset()
+
+        last_observation_writable_world_model_norm = self.standardize(last_observation_writable, self.model.obs_norm_stats)
+        last_observation_writable_latent = self.model.encoder(last_observation_writable_world_model_norm)
 
         with torch.no_grad():
-            while True:
-                action_main = self.policy.forward(last_observation_main)
-                action_writable = self.policy.forward(last_observation_writable)
+            while not self._stop.is_set():
+                # MAIN
+                last_obs_policy_norm = self.standardize(last_observation_main, self.policy.obs_norm_stats)
 
-                action_writable =
+                action = self.policy.sample_action(self.policy.forward(last_obs_policy_norm))
 
-                action = self._policy.sample(action_sampler)
-                next_observation, _, termination_state = self._mdp.step(action)
+                next_obs_main, _, termination_state_main = self._mdp.step(action)
 
-                self._dataset["current_observations"][timestep] = last_observation
-                self._dataset["next_observations"][timestep] = next_observation
-                self._dataset["actions"][timestep] = action
+                # WORLD MODEL
+                last_obs_policy_norm = self.standardize(last_observation_writable, self.policy.obs_norm_stats)
 
-                if termination_state is not MdpTerminationState.IN_PROGRESS:
-                    last_observation = self._mdp.reset()
+                action = self.policy.sample_action(self.policy.forward(last_obs_policy_norm))
+
+                action_world_norm = self.standardize(action, self.model.action_norm_stats)
+
+                next_obs_latent = self.model.predictor(last_observation_writable_latent, action_world_norm)
+
+                next_obs_decoder_norm = self.decoder(next_obs_latent)
+                next_obs_world_model = self.unstandardize(next_obs_decoder_norm, self.decoder.obs_norm_stats)
+
+                termination_state_world_model = self._mdp_world_model.set_state(next_obs_world_model)
+
+                # Resetting:
+                if self.sync_reset:
+                    termination_state_world_model = termination_state_main
+
+                if termination_state_main is not MdpTerminationState.IN_PROGRESS:
+                    last_observation_main = self._mdp.reset()
                 else:
-                    last_observation = next_observation
+                    last_observation_main =  next_obs_main
 
-        self._mdp.close()
+                if termination_state_world_model is not MdpTerminationState.IN_PROGRESS:
+                    last_observation_writable = self._mdp_world_model.reset()
+                    last_observation_writable_world_model_norm = self.standardize(last_observation_writable,
+                                                                                  self.model.obs_norm_stats)
+                    last_observation_writable_latent = self.model.encoder(last_observation_writable_world_model_norm)
+                else:
+                    last_observation_writable, last_observation_writable_latent = next_obs_world_model, next_obs_latent
+
+        self._mdp_world_model.close()
 
 
 
@@ -84,7 +111,12 @@ def parse_args():
     parser.add_argument("--environment", "-e", help="Environment Id to run", default="LunarLander-v3")
     parser.add_argument("--model", "-m", help="Path to model", required=True)
     parser.add_argument("--decoder", "-d", help="Path to decoder", required=True)
-    parser.add_argument("--policy", "-p", help="Path to policy", default=None)
+    parser.add_argument("--weights", "-w", help="Path to policy", default=None)
+    parser.add_argument("--policy", "-p", help="Policy type", default="categorical")
+
+
+    parser.add_argument("--sync", help="Should we sync mdp resetting", action="store_true")
+
 
     return parser.parse_args()
 
@@ -92,8 +124,8 @@ def parse_args():
 def main():
     args = parse_args()
 
-
-
+    visualiser = Visualiser(args.environment, args.model, args.decoder, (args.policy, args.weights), sync_reset=args.sync)
+    visualiser.evaluate()
 
 
 if __name__ == "__main__":

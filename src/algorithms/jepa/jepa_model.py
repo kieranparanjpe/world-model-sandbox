@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Optional
-
 import torch
 import torch.nn as nn
 from ml_commons.networks import SaveableNetwork
@@ -12,11 +10,16 @@ from src.algorithms.jepa.predictor import Predictor
 
 
 class JEPAModel(SaveableNetwork, nn.Module):
+    obs_norm_stats: NormalisationStats
+    action_norm_stats: NormalisationStats
+
     def __init__(self, encoder : Encoder, predictor : Predictor):
         super().__init__()
 
         self.encoder : Encoder = encoder
         self.predictor : Predictor = predictor
+        self.obs_norm_stats = NormalisationStats()
+        self.action_norm_stats = NormalisationStats()
 
     def forward(self, observation : torch.Tensor, action : torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         encoding = self.encoder(observation)
@@ -25,20 +28,20 @@ class JEPAModel(SaveableNetwork, nn.Module):
 
         return prediction, encoding
 
-    def save(self, path, norm_stats: Optional[dict[str, NormalisationStats]] = None):
+    def save(self, path):
         save_dict = {
             "model": self.state_dict(),
             "encoder_config": self.encoder.config,
             "predictor_config": self.predictor.config,
             "input_size": self.encoder.input_size,
             "action_size": self.predictor.action_size,
+            "obs_norm_stats": self.obs_norm_stats,
+            "action_norm_stats": self.action_norm_stats,
         }
-        if norm_stats is not None:
-            save_dict["norm_stats"] = norm_stats
         torch.save(save_dict, path)
 
     @classmethod
-    def load(cls, path, map_location="cpu", **kwargs) -> tuple[JEPAModel, Optional[dict[str, NormalisationStats]]]:
+    def load(cls, path, map_location="cpu", **kwargs) -> JEPAModel:
         checkpoint = torch.load(path, map_location=map_location, weights_only=True) if path else {}
 
         encoder = Encoder(checkpoint["input_size"], checkpoint["encoder_config"])
@@ -46,6 +49,8 @@ class JEPAModel(SaveableNetwork, nn.Module):
         model = JEPAModel(encoder, predictor)
 
         model.load_state_dict(checkpoint["model"])
+        model.obs_norm_stats = checkpoint.get("obs_norm_stats", NormalisationStats())
+        model.action_norm_stats = checkpoint.get("action_norm_stats", NormalisationStats())
         model.eval()
 
-        return model, checkpoint.get("norm_stats")
+        return model
