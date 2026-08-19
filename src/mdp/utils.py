@@ -2,7 +2,7 @@ from rl_commons.mdp import Mdp
 from rl_commons.policies import Policy
 from my_rl_impl.algorithms.policies import CategoricalPolicyConfig
 
-from mdp.uniform_policy import UniformPolicyConfig
+from src.mdp.uniform_policy import UniformPolicyConfig
 
 
 def get_random_policy(mdp : Mdp) -> Policy:

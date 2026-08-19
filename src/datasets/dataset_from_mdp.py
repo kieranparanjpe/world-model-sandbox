@@ -16,7 +16,8 @@ class DatasetFromMDP:
         self._mdp = mdp
         self._timesteps = timesteps
         time = f"{datetime.now():%Y-%m-%d-%H-%M-%S}"
-        self._output_path = Path(__file__).resolve().parents[2] / "datasets" / mdp_id / f"dataset_{time}.pt"
+        self._output_path = Path(__file__).resolve().parents[2] / "datasets" / mdp_id / "state-action" / (f"dataset"
+                                                                                                      f"_{time}.pt")
 
         self._policy = get_random_policy(self._mdp)
 
@@ -36,8 +37,11 @@ class DatasetFromMDP:
 
         with torch.no_grad():
             for timestep in tqdm(range(self._timesteps)):
-                action = self._policy.sample(action_sampler)
+                action = self._policy.sample_action(action_sampler)
                 next_observation, _, termination_state = self._mdp.step(action)
+
+                if self._mdp.discrete:
+                    action = torch.nn.functional.one_hot(action, self._mdp.action_dimension)
 
                 self._dataset["current_observations"][timestep] = last_observation
                 self._dataset["next_observations"][timestep] = next_observation
@@ -68,7 +72,7 @@ def main():
     args = parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    mdp = MdpGym(args.environment, device, mdp_config=MdpConfig(normalise_obs=False))
+    mdp = MdpGym(args.environment, device, mdp_config=MdpConfig(normalise_obs=False, normalise_reward=False))
 
     dataset_from_mdp = DatasetFromMDP(mdp, int(args.timesteps), args.environment)
     dataset_from_mdp.collect()

@@ -17,5 +17,8 @@ class Predictor(nn.Module):
         self._head = torch.nn.Linear(int(out_size), int(self.config.encoding_space_size))
 
     def forward(self, encoding: torch.Tensor, action: torch.Tensor) -> torch.Tensor:
+        if action.dim() == 0:
+            action.unsqueeze_(0)
+
         encoding_action = torch.concat((encoding, action), dim=-1)
         return self._head(self._net(encoding_action))

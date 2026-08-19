@@ -24,7 +24,7 @@ class RunInfoSupervised(RunInfo):
     dataset : str
 
     def tags(self) -> list[str]:
-        return [self.algorithm_id, self.task_id, self.dataset]
+        return [self.algorithm_id[-64:], self.task_id[-64:], self.dataset[-64:]]
 
 
 

@@ -1081,7 +1081,7 @@ wheels = [
 [[package]]
 name = "rl-commons"
 version = "0.1.0"
-source = { git = "https://github.com/kieranparanjpe/rl-commons.git#e01441e4c33958696d6d7992b984f7cbed6808ff" }
+source = { git = "https://github.com/kieranparanjpe/rl-commons.git#1a0dadff47af136556d43417bb2d784d29dfea17" }
 dependencies = [
     { name = "gym-pusht" },
     { name = "gymnasium", extra = ["box2d", "mujoco"] },

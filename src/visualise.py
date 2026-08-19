@@ -8,8 +8,8 @@ from rl_commons.mdp import MdpGym, MdpConfig, MdpTerminationState
 from rl_commons.policies import Policy
 from torch import nn
 
-from algorithms.jepa.jepa_model import JEPAModel
-from algorithms.jepa_decoder.decoder import Decoder
+from src.algorithms.jepa.jepa_model import JEPAModel
+from src.algorithms.jepa_decoder.decoder import Decoder
 from src.mdp.mdp_gym_writable import MdpGymWritable
 from src.mdp.utils import get_random_policy
 
@@ -74,6 +74,9 @@ class Visualiser(BaseEvaluator):
 
                 action = self.policy.sample_action(self.policy.forward(last_obs_policy_norm))
 
+                if self._mdp_world_model.discrete:
+                    action = torch.nn.functional.one_hot(action, self._mdp_world_model.action_dimension)
+
                 action_world_norm = self.standardize(action, self.model.action_norm_stats)
 
                 next_obs_latent = self.model.predictor(last_observation_writable_latent, action_world_norm)
@@ -112,7 +115,7 @@ def parse_args():
     parser.add_argument("--model", "-m", help="Path to model", required=True)
     parser.add_argument("--decoder", "-d", help="Path to decoder", required=True)
     parser.add_argument("--weights", "-w", help="Path to policy", default=None)
-    parser.add_argument("--policy", "-p", help="Policy type", default="categorical")
+    parser.add_argument("--policy", "-p", help="Policy type", default=None)
 
 
     parser.add_argument("--sync", help="Should we sync mdp resetting", action="store_true")
@@ -123,8 +126,8 @@ def parse_args():
 
 def main():
     args = parse_args()
-
-    visualiser = Visualiser(args.environment, args.model, args.decoder, (args.policy, args.weights), sync_reset=args.sync)
+    policy_id_path = (args.policy, args.weights) if args.policy and args.weights else None
+    visualiser = Visualiser(args.environment, args.model, args.decoder, policy_id_path, sync_reset=args.sync)
     visualiser.evaluate()
 
 
