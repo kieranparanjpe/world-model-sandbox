@@ -13,5 +13,7 @@ class JepaConfig(AlgorithmConfig):
     encoder_regularization : float = 0
     predictor_regularization : float = 0
 
+    lookahead_steps : int = 1
+
     encoder_config : EncoderConfig = field(default_factory=EncoderConfig)
     predictor_config : PredictorConfig = field(default_factory=PredictorConfig)

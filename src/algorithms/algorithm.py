@@ -57,6 +57,10 @@ class Algorithm(ABC):
     def save_models(self, current_epoch : int):
         pass
 
+    @abstractmethod
+    def load_model(self, path : str):
+        pass
+
     def resolve_dataset(self, dataset: Dataset) -> list[tuple[Subset[Dataset], Subset[Dataset]]]:
         dataset_length = len(cast(Sized, dataset))
 

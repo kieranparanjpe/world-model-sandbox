@@ -69,6 +69,9 @@ class JEPADecoder(Algorithm):
         self.decoder.obs_norm_stats = self.dataset.get_norm_stats()[OBS_NORM_KEY]
         self.decoder.save(f'{model_path}/decoder_{current_epoch:0{width}d}.pt')
 
+    def load_model(self, path : str):
+        self.decoder = Decoder.load(path, map_location=self.device)
+
     def train_single_epoch(self, train_loader : DataLoader[DatasetEncoder]):
         """
         Side effect: places loss into logger["losses/loss"]

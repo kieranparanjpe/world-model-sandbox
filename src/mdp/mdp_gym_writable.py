@@ -1,4 +1,4 @@
-from typing import Callable
+from typing import Callable, Optional
 import sys
 
 import numpy as np
@@ -31,9 +31,12 @@ class MdpGymWritable(MdpWritable, MdpGym):
             "mujoco": self._set_mujoco_state
         }
 
-    def reset(self) -> torch.Tensor:
+    def reset(self, seed: Optional[int] = None) -> torch.Tensor:
         self._reconstructed_root_pos = None
-        return MdpGym.reset(self)
+        return MdpGym.reset(self, seed=seed)
+
+    def render(self):
+        return self._env.render()
 
     def _set_mujoco_state(self, state: torch.Tensor) -> MdpTerminationState:
         env = self._env.unwrapped
@@ -94,6 +97,7 @@ class MdpGymWritable(MdpWritable, MdpGym):
         SCALE = ll_module.SCALE
         FPS = ll_module.FPS
         LEG_DOWN = ll_module.LEG_DOWN
+        LEG_AWAY = ll_module.LEG_AWAY
 
         # Reverse the scaling applied in LunarLander's step() function
         # Note: env.helipad_y is dynamically calculated and stored on the env object during env.reset()
@@ -110,6 +114,18 @@ class MdpGymWritable(MdpWritable, MdpGym):
         env.lander.linearVelocity = (vx, vy)
         env.lander.angle = angle
         env.lander.angularVelocity = angular_velocity
+
+        # Legs are separate Box2D bodies joined to the lander by a revolute joint: the joint
+        # only constrains the pivot point (leg's local anchor coincides with the lander's
+        # origin) -- rotation is a free DOF (motor + limits), not derivable from the lander's
+        # pose. Re-solve that same anchor equation for the new lander position, at each leg's
+        # current angle, instead of leaving legs stranded wherever they last physically settled.
+        for leg, i in zip(env.legs, (-1, 1)):
+            anchor_b_x, anchor_b_y = i * LEG_AWAY / SCALE, LEG_DOWN / SCALE
+            cos_leg, sin_leg = np.cos(leg.angle), np.sin(leg.angle)
+            anchor_world_x = cos_leg * anchor_b_x - sin_leg * anchor_b_y
+            anchor_world_y = sin_leg * anchor_b_x + cos_leg * anchor_b_y
+            leg.position = (x - anchor_world_x, y - anchor_world_y)
 
         # Box2D only resolves contacts (and thus game_over/leg ground_contact) inside world.Step().
         # A zero-length step forces contact resolution at the new position without advancing

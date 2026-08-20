@@ -10,13 +10,19 @@ from src.datasets.norm_stats_keys import OBS_NORM_KEY, ACTION_NORM_KEY
 
 class DatasetSA(Dataset):
 
+    number_steps: int
+
     def __init__(self, path : pathlib.Path,
+                 number_steps : int = 1,
                  obs_norm : Optional[NormalisationStats] = None,
                  action_norm : Optional[NormalisationStats] = None):
+
         dataset_dict = torch.load(path, weights_only=True)
         self.current_observations : torch.Tensor = dataset_dict["current_observations"].detach()
         self.actions : torch.Tensor = dataset_dict["actions"].detach()
         self.next_observations : torch.Tensor = dataset_dict["next_observations"].detach()
+
+        self.set_number_steps(number_steps)
 
         if len(self.current_observations) != len(self.actions) != len(self.next_observations):
             raise ValueError("Observation and action length mismatch.")
@@ -28,6 +34,10 @@ class DatasetSA(Dataset):
             self.apply_obs_normalization(obs_norm)
         if action_norm is not None:
             self.apply_action_normalization(action_norm)
+
+    def set_number_steps(self, number_steps: int):
+        assert 0 < number_steps <= len(self.current_observations)
+        self.number_steps = number_steps
 
     def apply_obs_normalization(self, norm : NormalisationStats):
         if self._obs_norm is not None:
@@ -72,12 +82,12 @@ class DatasetSA(Dataset):
         )
 
     def __len__(self):
-        return len(self.current_observations)
+        return len(self.current_observations) + 1 - self.number_steps
 
     def __getitem__(self, idx) -> dict[str, torch.Tensor]:
         return {
-            "current_observations": self.current_observations[idx],
-            "actions": self.actions[idx],
-            "next_observations": self.next_observations[idx]
+            "current_observations": self.current_observations[idx:idx + self.number_steps],
+            "actions": self.actions[idx:idx + self.number_steps],
+            "next_observations": self.next_observations[idx:idx + self.number_steps]
         }
 

@@ -54,6 +54,8 @@ class JEPA(Algorithm):
                  should_save_models=False):
         super().__init__(hyperparameters, run_info, obs_dimension, dataset, logger, device, should_save_models)
 
+        self.dataset.set_number_steps(hyperparameters.lookahead_steps)
+
         self.encoder_factory = encoder_factory
         self.predictor_factory = predictor_factory
         self.reset_models()
@@ -87,14 +89,33 @@ class JEPA(Algorithm):
         self.model.action_norm_stats = norm_stats[ACTION_NORM_KEY]
         self.model.save(f'{model_path}/model_{current_epoch:0{width}d}.pt')
 
-    def forward(self, current_observations, actions, next_observations):
-        prediction, encoding = self.model.forward(current_observations, actions)
+    def load_model(self, path : str):
+        self.model = JEPAModel.load(path, map_location=self.device)
+        self.label_encoder = copy.deepcopy(self.model.encoder)
+        for param in self.label_encoder.parameters():
+            param.requires_grad = False
 
-        encoded_label = self.label_encoder(next_observations)
+    def loss(self, current_observations, actions, next_observations):
+        # All have shape: [B, Number Steps, Stat Size]
 
-        loss = self.criterion(prediction, encoded_label)
+        # Get (s, a, s')
+        current_observation = current_observations[:, 0]
+        action = actions[:, 0]
+        next_observation = next_observations[:, 0]
 
-        return encoding, prediction, encoded_label, loss
+        predicted_obs_encoding, _ = self.model(current_observation, action) # Find P(E(s), a)
+        encoded_label = self.label_encoder(next_observation) # Find E'(s')
+        loss = self.criterion(predicted_obs_encoding, encoded_label)
+
+        for i in range(1, self.dataset.number_steps):
+            action = actions[:, i]
+            next_observation = next_observations[:, i]
+
+            predicted_obs_encoding = self.model.predictor(predicted_obs_encoding, action) # Find P(P(E(s), a), a') (or deeper)
+            encoded_label = self.label_encoder(next_observation) # Find E'(s^n)
+            loss += self.criterion(predicted_obs_encoding, encoded_label)
+
+        return loss / self.dataset.number_steps
 
     def extract_batch(self, batch: dict[str, torch.Tensor]) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         return (batch["current_observations"].to(self.device),
@@ -113,7 +134,7 @@ class JEPA(Algorithm):
         for batch in train_loader:
             current_observations, actions, next_observations = self.extract_batch(batch)
 
-            _, _, _, loss = self.forward(current_observations, actions, next_observations)
+            loss = self.loss(current_observations, actions, next_observations)
 
             self.model.zero_grad()
 
@@ -145,7 +166,7 @@ class JEPA(Algorithm):
         with torch.no_grad():
             for batch in validation_loader:
                 current_observations, actions, next_observations = self.extract_batch(batch)
-                _, _, _, loss = self.forward(current_observations, actions, next_observations)
+                loss = self.loss(current_observations, actions, next_observations)
 
                 # Logging and stats
                 batch_length = current_observations.size(0)

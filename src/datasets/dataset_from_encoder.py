@@ -18,13 +18,13 @@ from src.datasets.dataset_sa import DatasetSA
 
 class DatasetFromEncoder:
 
-    def __init__(self, datasetSA : DatasetSA, encoder : Encoder, task_id : str,
-                 obs_norm : Optional[NormalisationStats] = None,
-                 device : Optional[torch.device] = None):
-        self.device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self._encoder = encoder.to(self.device)
-        self._datasetSA = datasetSA
-        self._obs_norm = obs_norm
+    def __init__(self, dataset_path : str, model_path : str, task_id : str):
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        model = JEPAModel.load(model_path, map_location=self.device)
+
+        self._encoder = model.encoder.to(self.device)
+        self._datasetSA = DatasetSA(Path(dataset_path))
+        self._obs_norm = model.obs_norm_stats
 
         time = f"{datetime.now():%Y-%m-%d-%H-%M-%S}"
         self._output_path = Path(__file__).resolve().parents[2] / "datasets" / task_id / "decoder" / f"dataset_{time}.pt"
@@ -34,6 +34,8 @@ class DatasetFromEncoder:
                                                  device=self.device),
             "raw_observations": torch.zeros((len(self._datasetSA), self._encoder.input_size), dtype=torch.float32,
                                                  device=self.device),
+            "dataset_path": dataset_path,
+            "model_path": model_path,
         }
 
     def collect(self):
@@ -73,11 +75,7 @@ def parse_args():
 def main():
     args = parse_args()
 
-    datasetSA = DatasetSA(args.dataset)
-    model = JEPAModel.load(args.model)
-
-    dataset_from_encoder = DatasetFromEncoder(datasetSA, model.encoder, args.environment,
-                                              obs_norm=model.obs_norm_stats)
+    dataset_from_encoder = DatasetFromEncoder(args.dataset, args.model, args.environment)
     dataset_from_encoder.collect()
     dataset_from_encoder.save()
 

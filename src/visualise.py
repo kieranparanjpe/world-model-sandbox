@@ -17,10 +17,14 @@ from src.mdp.utils import get_random_policy
 import argparse
 import functools
 import os
+import random
 from pathlib import Path
 
+import cv2
 import torch
 from datetime import datetime
+
+_WORLD_MODEL_WINDOW = "World Model"
 
 
 class Visualiser(BaseEvaluator):
@@ -32,7 +36,7 @@ class Visualiser(BaseEvaluator):
         super().__init__(task_id, mdp_config=self._mdp_config)
 
         self.sync_reset = sync_reset
-        self._mdp_world_model = MdpGymWritable(task_id, device=self.device, mdp_config=self._mdp_config, render_mode="human")
+        self._mdp_world_model = MdpGymWritable(task_id, device=self.device, mdp_config=self._mdp_config, render_mode="rgb_array")
 
         self.model = JEPAModel.load(model_path, map_location=self.device)
         self.decoder = Decoder.load(decoder_path, map_location=self.device)
@@ -48,14 +52,17 @@ class Visualiser(BaseEvaluator):
         return (value - norm_stats.mean_t(device=self.device)) / norm_stats.std_t(device=self.device)
 
     def unstandardize(self, value: torch.Tensor, norm_stats: NormalisationStats):
-        return (value * norm_stats.mean_t(device=self.device)) + norm_stats.std_t(device=self.device)
+        return (value * norm_stats.std_t(device=self.device)) + norm_stats.mean_t(device=self.device)
 
     def _run(self):
         self.model.eval()
         self.decoder.eval()
 
-        last_observation_main = self._mdp.reset()
-        last_observation_writable = self._mdp_world_model.reset()
+        seed = random.randint(0, 2**31 - 1)
+        last_observation_main = self._mdp.reset(seed=seed)
+        self._mdp_world_model.reset(seed=seed)
+        self._mdp_world_model.set_state(last_observation_main)
+        last_observation_writable = last_observation_main
 
         last_observation_writable_world_model_norm = self.standardize(last_observation_writable, self.model.obs_norm_stats)
         last_observation_writable_latent = self.model.encoder(last_observation_writable_world_model_norm)
@@ -86,17 +93,30 @@ class Visualiser(BaseEvaluator):
 
                 termination_state_world_model = self._mdp_world_model.set_state(next_obs_world_model)
 
+                frame = self._mdp_world_model.render()
+                cv2.imshow(_WORLD_MODEL_WINDOW, cv2.cvtColor(frame, cv2.COLOR_RGB2BGR))
+                cv2.waitKey(1)
+
                 # Resetting:
                 if self.sync_reset:
                     termination_state_world_model = termination_state_main
 
+                reset_seed = None
+                if self.sync_reset and termination_state_main is not MdpTerminationState.IN_PROGRESS:
+                    reset_seed = random.randint(0, 2**31 - 1)
+
                 if termination_state_main is not MdpTerminationState.IN_PROGRESS:
-                    last_observation_main = self._mdp.reset()
+                    last_observation_main = self._mdp.reset(seed=reset_seed)
                 else:
                     last_observation_main =  next_obs_main
 
                 if termination_state_world_model is not MdpTerminationState.IN_PROGRESS:
-                    last_observation_writable = self._mdp_world_model.reset()
+                    last_observation_writable = self._mdp_world_model.reset(seed=reset_seed)
+                    if reset_seed is not None:
+                        # Same seed as main -> identical hidden reset-time randomness (terrain,
+                        # initial impulse). Pin the observed dims too, for exact parity.
+                        self._mdp_world_model.set_state(last_observation_main)
+                        last_observation_writable = last_observation_main
                     last_observation_writable_world_model_norm = self.standardize(last_observation_writable,
                                                                                   self.model.obs_norm_stats)
                     last_observation_writable_latent = self.model.encoder(last_observation_writable_world_model_norm)
@@ -104,6 +124,7 @@ class Visualiser(BaseEvaluator):
                     last_observation_writable, last_observation_writable_latent = next_obs_world_model, next_obs_latent
 
         self._mdp_world_model.close()
+        cv2.destroyAllWindows()
 
 
 
