@@ -22,17 +22,19 @@ class DatasetFromEncoder:
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         model = JEPAModel.load(model_path, map_location=self.device)
 
-        self._encoder = model.encoder.to(self.device)
+        self._model = model.to(self.device)
         self._datasetSA = DatasetSA(Path(dataset_path))
         self._obs_norm = model.obs_norm_stats
 
         time = f"{datetime.now():%Y-%m-%d-%H-%M-%S}"
         self._output_path = Path(__file__).resolve().parents[2] / "datasets" / task_id / "decoder" / f"dataset_{time}.pt"
 
+        self.length = len(self._datasetSA) * 2
+
         self._dataset = {
-            "encodings" : torch.zeros((len(self._datasetSA), self._encoder.config.encoding_space_size), dtype=torch.float32,
+            "encodings" : torch.zeros((self.length, self._model.encoder.config.encoding_space_size), dtype=torch.float32,
                                                  device=self.device),
-            "raw_observations": torch.zeros((len(self._datasetSA), self._encoder.input_size), dtype=torch.float32,
+            "raw_observations": torch.zeros((self.length, self._model.encoder.input_size), dtype=torch.float32,
                                                  device=self.device),
             "dataset_path": dataset_path,
             "model_path": model_path,
@@ -48,14 +50,27 @@ class DatasetFromEncoder:
 
         with torch.no_grad():
             for idx, batch in tqdm(enumerate(dataloader)):
-                observations = batch["current_observations"].to(self.device)
+                observations = batch["current_observations"].squeeze().to(self.device)
+                actions = batch["actions"].squeeze().to(self.device)
+                next_observations = batch["next_observations"].squeeze().to(self.device)
+
                 encoder_input = observations if mean is None else (observations - mean) / std
-                encodings = self._encoder(encoder_input)
-                start = idx * batch_size
-                end = min(start + batch_size, len(self._datasetSA))
-                self._dataset["encodings"][start : end] = encodings
+                actions = (actions - self._model.action_norm_stats.mean_t(device=self.device)) / self._model.action_norm_stats.std_t(device=self.device)
+                predictions, encodings = self._model(encoder_input, actions)
+
+
+
+                real_batch_size = observations.size(0)
+                start = idx * batch_size * 2
+                mid = start + real_batch_size
+                end = min(start + real_batch_size * 2, self.length)
+                self._dataset["encodings"][start : mid] = encodings
                 # raw_observations stays unnormalized -- DatasetEncoder is the single point stats get applied
-                self._dataset["raw_observations"][start: end] = observations
+                self._dataset["raw_observations"][start : mid] = observations
+
+                self._dataset["encodings"][mid : end] = predictions
+                # raw_observations stays unnormalized -- DatasetEncoder is the single point stats get applied
+                self._dataset["raw_observations"][mid : end] = next_observations
 
     def save(self):
         file_path = Path(self._output_path)

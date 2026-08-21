@@ -21,6 +21,7 @@ class DatasetSA(Dataset):
         self.current_observations : torch.Tensor = dataset_dict["current_observations"].detach()
         self.actions : torch.Tensor = dataset_dict["actions"].detach()
         self.next_observations : torch.Tensor = dataset_dict["next_observations"].detach()
+        self.episode : torch.Tensor = dataset_dict["episode"].detach()
 
         self.set_number_steps(number_steps)
 
@@ -85,9 +86,13 @@ class DatasetSA(Dataset):
         return len(self.current_observations) + 1 - self.number_steps
 
     def __getitem__(self, idx) -> dict[str, torch.Tensor]:
+        window_episode = self.episode[idx:idx + self.number_steps]
+        valid = (window_episode == window_episode[0]).squeeze(-1)
+
         return {
             "current_observations": self.current_observations[idx:idx + self.number_steps],
             "actions": self.actions[idx:idx + self.number_steps],
-            "next_observations": self.next_observations[idx:idx + self.number_steps]
+            "next_observations": self.next_observations[idx:idx + self.number_steps],
+            "valid": valid,
         }
 

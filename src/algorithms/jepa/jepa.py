@@ -60,7 +60,7 @@ class JEPA(Algorithm):
         self.predictor_factory = predictor_factory
         self.reset_models()
 
-        self.criterion = nn.MSELoss()
+        self.criterion = nn.MSELoss(reduction='none')
 
     # noinspection PyAttributeOutsideInit
     def reset_models(self):
@@ -95,8 +95,9 @@ class JEPA(Algorithm):
         for param in self.label_encoder.parameters():
             param.requires_grad = False
 
-    def loss(self, current_observations, actions, next_observations):
-        # All have shape: [B, Number Steps, Stat Size]
+    def loss(self, current_observations, actions, next_observations, mask):
+        # current_observations/actions/next_observations: [B, Number Steps, Stat Size]. mask: [B, Number Steps]
+        mask = mask.float()
 
         # Get (s, a, s')
         current_observation = current_observations[:, 0]
@@ -105,7 +106,9 @@ class JEPA(Algorithm):
 
         predicted_obs_encoding, _ = self.model(current_observation, action) # Find P(E(s), a)
         encoded_label = self.label_encoder(next_observation) # Find E'(s')
-        loss = self.criterion(predicted_obs_encoding, encoded_label)
+        step_loss = self.criterion(predicted_obs_encoding, encoded_label).mean(dim=-1)
+        weighted_loss = step_loss * mask[:, 0]
+        valid_counts = mask[:, 0].clone()
 
         for i in range(1, self.dataset.number_steps):
             action = actions[:, i]
@@ -113,14 +116,19 @@ class JEPA(Algorithm):
 
             predicted_obs_encoding = self.model.predictor(predicted_obs_encoding, action) # Find P(P(E(s), a), a') (or deeper)
             encoded_label = self.label_encoder(next_observation) # Find E'(s^n)
-            loss += self.criterion(predicted_obs_encoding, encoded_label)
 
-        return loss / self.dataset.number_steps
+            # Do not contribute to loss if we are past the episode boundary
+            step_loss = self.criterion(predicted_obs_encoding, encoded_label).mean(dim=-1)
+            weighted_loss = weighted_loss + step_loss * mask[:, i]
+            valid_counts = valid_counts + mask[:, i]
 
-    def extract_batch(self, batch: dict[str, torch.Tensor]) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        return (weighted_loss / valid_counts.clamp(min=1)).mean()
+
+    def extract_batch(self, batch: dict[str, torch.Tensor]) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         return (batch["current_observations"].to(self.device),
                 batch["actions"].to(self.device),
-                batch["next_observations"].to(self.device))
+                batch["next_observations"].to(self.device),
+                batch["valid"].to(self.device))
 
     def train_single_epoch(self, train_loader : DataLoader[DatasetSA]):
         """
@@ -132,9 +140,9 @@ class JEPA(Algorithm):
         self.logger.reset("losses/train_loss")
 
         for batch in train_loader:
-            current_observations, actions, next_observations = self.extract_batch(batch)
+            current_observations, actions, next_observations, mask = self.extract_batch(batch)
 
-            loss = self.loss(current_observations, actions, next_observations)
+            loss = self.loss(current_observations, actions, next_observations, mask)
 
             self.model.zero_grad()
 
@@ -165,8 +173,8 @@ class JEPA(Algorithm):
 
         with torch.no_grad():
             for batch in validation_loader:
-                current_observations, actions, next_observations = self.extract_batch(batch)
-                loss = self.loss(current_observations, actions, next_observations)
+                current_observations, actions, next_observations, mask = self.extract_batch(batch)
+                loss = self.loss(current_observations, actions, next_observations, mask)
 
                 # Logging and stats
                 batch_length = current_observations.size(0)
