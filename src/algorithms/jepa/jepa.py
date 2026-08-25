@@ -67,6 +67,9 @@ class JEPA(Algorithm):
         self.model = JEPAModel(self.encoder_factory(), self.predictor_factory())
         self.label_encoder = copy.deepcopy(self.model.encoder)
 
+        self.model.to(self.device)
+        self.label_encoder.to(self.device)
+
         self.encoder_optimiser = optim.Adam(self.model.encoder.parameters(),
                                             lr=self.hyperparameters.encoder_lr,
                                             weight_decay=self.hyperparameters.encoder_regularization)

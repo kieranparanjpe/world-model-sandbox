@@ -51,6 +51,7 @@ class JEPAModel(SaveableNetwork, nn.Module):
         model.load_state_dict(checkpoint["model"])
         model.obs_norm_stats = checkpoint.get("obs_norm_stats", NormalisationStats())
         model.action_norm_stats = checkpoint.get("action_norm_stats", NormalisationStats())
+        model.to(map_location)
         model.eval()
 
         return model

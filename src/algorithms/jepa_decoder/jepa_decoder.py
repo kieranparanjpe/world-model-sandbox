@@ -60,6 +60,7 @@ class JEPADecoder(Algorithm):
     # noinspection PyAttributeOutsideInit
     def reset_models(self):
         self.decoder = self.decoder_factory()
+        self.decoder.to(self.device)
 
         self.decoder_optimiser = optim.Adam(self.decoder.parameters(),
                                             lr=self.hyperparameters.decoder_lr,

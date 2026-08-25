@@ -87,8 +87,8 @@ class Algorithm(ABC):
                     "losses/validation_loss": f"{fold}-"
                 })
             for epoch in tqdm(range(self.hyperparameters.epochs)):
-                train_loader = DataLoader(train_dataset, shuffle=True, batch_size=self.hyperparameters.batch_size)
-                validation_loader = DataLoader(validation_dataset, batch_size=self.hyperparameters.batch_size)
+                train_loader = DataLoader(train_dataset, shuffle=True, batch_size=self.hyperparameters.batch_size, pin_memory=(self.device.type == "cuda"))
+                validation_loader = DataLoader(validation_dataset, batch_size=self.hyperparameters.batch_size, pin_memory=(self.device.type == "cuda"))
                 self.train_single_epoch(train_loader)
                 self.evaluate(validation_loader)
 

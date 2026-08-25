@@ -11,7 +11,7 @@ from src.datasets.norm_stats_keys import OBS_NORM_KEY
 class DatasetEncoder(Dataset):
 
     def __init__(self, path : pathlib.Path, obs_norm : Optional[NormalisationStats] = None):
-        dataset_dict = torch.load(path, weights_only=True)
+        dataset_dict = torch.load(path, weights_only=True, map_location="cpu")
         self.encodings : torch.Tensor = dataset_dict["encodings"].detach()
         self.raw_observations : torch.Tensor = dataset_dict["raw_observations"].detach()
 
@@ -42,8 +42,8 @@ class DatasetEncoder(Dataset):
 
     def _compute_obs_stats(self) -> NormalisationStats:
         return NormalisationStats(
-            mean=self.raw_observations.mean(dim=0).numpy(),
-            var=self.raw_observations.var(dim=0).numpy() + 1e-8,
+            mean=self.raw_observations.mean(dim=0).cpu().numpy(),
+            var=self.raw_observations.var(dim=0).cpu().numpy() + 1e-8,
         )
 
     def __len__(self):

@@ -17,7 +17,7 @@ class DatasetSA(Dataset):
                  obs_norm : Optional[NormalisationStats] = None,
                  action_norm : Optional[NormalisationStats] = None):
 
-        dataset_dict = torch.load(path, weights_only=True)
+        dataset_dict = torch.load(path, weights_only=True, map_location="cpu")
         self.current_observations : torch.Tensor = dataset_dict["current_observations"].detach()
         self.actions : torch.Tensor = dataset_dict["actions"].detach()
         self.next_observations : torch.Tensor = dataset_dict["next_observations"].detach()
@@ -72,14 +72,14 @@ class DatasetSA(Dataset):
 
     def _compute_obs_stats(self) -> NormalisationStats:
         return NormalisationStats(
-            mean=self.current_observations.mean(dim=0).numpy(),
-            var=self.current_observations.var(dim=0).numpy() + 1e-8,
+            mean=self.current_observations.mean(dim=0).cpu().numpy(),
+            var=self.current_observations.var(dim=0).cpu().numpy() + 1e-8,
         )
 
     def _compute_action_stats(self) -> NormalisationStats:
         return NormalisationStats(
-            mean=self.actions.mean(dim=0).numpy(),
-            var=self.actions.var(dim=0).numpy() + 1e-8,
+            mean=self.actions.mean(dim=0).cpu().numpy(),
+            var=self.actions.var(dim=0).cpu().numpy() + 1e-8,
         )
 
     def __len__(self):

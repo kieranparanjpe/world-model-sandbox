@@ -43,6 +43,7 @@ class Decoder(SaveableNetwork, nn.Module):
         decoder.load_state_dict(state_dict)
         decoder.obs_norm_stats = checkpoint.get("obs_norm_stats", NormalisationStats())
 
+        decoder.to(map_location)
         decoder.eval()
 
         return decoder

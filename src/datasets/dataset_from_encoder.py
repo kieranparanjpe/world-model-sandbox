@@ -75,7 +75,7 @@ class DatasetFromEncoder:
     def save(self):
         file_path = Path(self._output_path)
         file_path.parent.mkdir(parents=True, exist_ok=True)
-        torch.save(self._dataset, file_path)
+        torch.save({k: v.cpu() if isinstance(v, torch.Tensor) else v for k, v in self._dataset.items()}, file_path)
 
         print(f"Saved Dataset Decoder to: {file_path}")
 
