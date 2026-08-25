@@ -50,3 +50,9 @@ class ConsoleLogger(Logger):
     def set_prefix(self, elements : Dict[str, str]):
         for k, v in elements.items():
             self._elements_prefix[k] = v
+
+    def add_tags(self, *tags):
+        pass
+
+    def update_config(self, kvps):
+        pass

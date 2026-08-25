@@ -76,11 +76,7 @@ class Visualiser(BaseEvaluator):
 
                 next_obs_main, _, termination_state_main = self._mdp.step(action)
 
-                # WORLD MODEL
-                last_obs_policy_norm = self.standardize(last_observation_writable, self.policy.obs_norm_stats)
-
-                action = self.policy.sample_action(self.policy.forward(last_obs_policy_norm))
-
+                # WORLD MODEL — reuse same action from main
                 if self._mdp_world_model.discrete:
                     action = torch.nn.functional.one_hot(action, self._mdp_world_model.action_dimension)
 

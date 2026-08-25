@@ -15,6 +15,9 @@ class DatasetEncoder(Dataset):
         self.encodings : torch.Tensor = dataset_dict["encodings"].detach()
         self.raw_observations : torch.Tensor = dataset_dict["raw_observations"].detach()
 
+        self.dataset_path = dataset_dict["dataset_path"]
+        self.model_path = dataset_dict["model_path"]
+
         if len(self.encodings) != len(self.raw_observations):
             raise ValueError("X and Y length mismatch")
 

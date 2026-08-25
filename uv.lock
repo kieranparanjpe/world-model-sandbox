@@ -527,7 +527,7 @@ wheels = [
 [[package]]
 name = "ml-commons"
 version = "0.1.0"
-source = { git = "https://github.com/kieranparanjpe/ml-commons.git#93572b5b30cc7e8149ae12b6b40d96d2526f0cbb" }
+source = { git = "https://github.com/kieranparanjpe/ml-commons.git#40e75aa33e555bd63c9920e5322b8a18b7dc2f62" }
 dependencies = [
     { name = "numpy" },
     { name = "pydantic" },

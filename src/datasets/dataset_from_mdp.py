@@ -73,6 +73,8 @@ class DatasetFromMDP:
         file_path.parent.mkdir(parents=True, exist_ok=True)
         torch.save(self._dataset, file_path)
 
+        print(f"Saved Dataset SA to: {file_path}")
+
 def parse_args():
     parser = argparse.ArgumentParser()
 

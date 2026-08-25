@@ -153,10 +153,10 @@ class JEPA(Algorithm):
 
             with torch.no_grad():
                 # Update label encoder weights with EMA
-                for input_parameter, label_parameter in zip(self.label_encoder.parameters(),
-                                                            self.model.encoder.parameters()):
-                    # Lerp is the same as EMA
-                    label_parameter.lerp_(input_parameter, self.hyperparameters.label_encoder_ema_momentum)
+                for target_param, online_param in zip(self.label_encoder.parameters(),
+                                                       self.model.encoder.parameters()):
+                    # EMA: target = momentum * target + (1 - momentum) * online
+                    target_param.lerp_(online_param, 1.0 - self.hyperparameters.label_encoder_ema_momentum)
 
                 # Logging and stats
                 batch_length = current_observations.size(0)

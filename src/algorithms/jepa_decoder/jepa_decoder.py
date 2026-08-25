@@ -50,6 +50,11 @@ class JEPADecoder(Algorithm):
         self.decoder_factory = decoder_factory
         self.reset_models()
 
+        self.logger.update_config({
+            "model_path": self.dataset.model_path,
+            "dataset_path": self.dataset.dataset_path
+        })
+
         self.criterion = nn.MSELoss()
 
     # noinspection PyAttributeOutsideInit

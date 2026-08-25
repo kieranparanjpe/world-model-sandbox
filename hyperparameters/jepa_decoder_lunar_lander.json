@@ -1,6 +1,6 @@
 {
   "algorithm": {
-    "epochs": 150,
+    "epochs": 90,
     "batch_size": 512,
     "decoder_lr": 0.003,
     "decoder_regularization": 0,

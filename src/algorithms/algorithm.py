@@ -4,7 +4,7 @@ from typing import Optional, Sized, cast
 import numpy as np
 import torch
 from ml_commons.config import RunInfo
-from ml_commons.log import Logger, NullLogger
+from ml_commons.log import Logger, NullLogger, WandBLogger
 from sklearn.model_selection import KFold
 from torch.utils.data import Dataset, Subset, DataLoader
 from tqdm.auto import tqdm
