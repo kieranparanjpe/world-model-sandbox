@@ -26,7 +26,6 @@ class DatasetFromMDP:
                                   action_dimension=self._mdp.action_dimension,
                                   policy_id=policy_id_path[0]) \
             if policy_id_path else get_random_policy(self._mdp)
-        self._policy = get_random_policy(self._mdp)
 
         self._dataset = {
             "current_observations" : torch.zeros((timesteps, self._mdp.obs_dimension), dtype=torch.float32,
