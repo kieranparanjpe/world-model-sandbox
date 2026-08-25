@@ -9,11 +9,12 @@ def get_random_policy(mdp : Mdp) -> Policy:
     if mdp.discrete:
         policy_id = "categorical"
         policy_config = CategoricalPolicyConfig()
-        return Policy.build_policy(policy_id, mdp.obs_dimension, mdp.action_dimension, policy_config)
+        policy = Policy.build_policy(policy_id, mdp.obs_dimension, mdp.action_dimension, policy_config)
     else:
         policy_id = "uniform"
         policy_config = UniformPolicyConfig(action_range=(float(mdp.action_range[0][0]), float(mdp.action_range[0][1])))
-        return Policy.build_policy(policy_id, mdp.obs_dimension, mdp.action_dimension, policy_config)
+        policy = Policy.build_policy(policy_id, mdp.obs_dimension, mdp.action_dimension, policy_config)
+    return policy.to(mdp.device)
 
 
 
