@@ -46,11 +46,11 @@ class Algorithm(ABC):
         pass
 
     @abstractmethod
-    def train_single_epoch(self, train_loader: DataLoader):
+    def train_single_epoch(self, train_loader: DataLoader, epoch: int):
         pass
 
     @abstractmethod
-    def evaluate(self, validation_loader: DataLoader):
+    def evaluate(self, validation_loader: DataLoader, epoch: int):
         pass
 
     @abstractmethod
@@ -89,8 +89,8 @@ class Algorithm(ABC):
             for epoch in tqdm(range(self.hyperparameters.epochs)):
                 train_loader = DataLoader(train_dataset, shuffle=True, batch_size=self.hyperparameters.batch_size, pin_memory=(self.device.type == "cuda"))
                 validation_loader = DataLoader(validation_dataset, batch_size=self.hyperparameters.batch_size, pin_memory=(self.device.type == "cuda"))
-                self.train_single_epoch(train_loader)
-                self.evaluate(validation_loader)
+                self.train_single_epoch(train_loader, epoch)
+                self.evaluate(validation_loader, epoch)
 
                 # Logging
                 self.logger.set_log_data({

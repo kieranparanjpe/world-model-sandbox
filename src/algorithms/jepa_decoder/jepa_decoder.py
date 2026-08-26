@@ -78,7 +78,7 @@ class JEPADecoder(Algorithm):
     def load_model(self, path : str):
         self.decoder = Decoder.load(path, map_location=self.device)
 
-    def train_single_epoch(self, train_loader : DataLoader[DatasetEncoder]):
+    def train_single_epoch(self, train_loader : DataLoader[DatasetEncoder], epoch: int):
         """
         Side effect: places loss into logger["losses/loss"]
         """
@@ -107,7 +107,7 @@ class JEPADecoder(Algorithm):
                     "losses/train_loss": loss.item() * batch_length / total_samples
                 })
 
-    def evaluate(self, validation_loader : DataLoader[DatasetEncoder]):
+    def evaluate(self, validation_loader : DataLoader[DatasetEncoder], epoch: int):
         self.decoder.eval()
 
         self.logger.reset("losses/validation_loss")
