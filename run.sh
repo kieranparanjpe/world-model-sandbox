@@ -12,30 +12,31 @@ elif [ "$COMMAND" = "train_encoder" ]; then
     uv run python -m src.train \
         --environment="LunarLander-v3" \
         --algorithm="jepa" \
-        --dataset="datasets/LunarLander-v3/state-action/dataset_2026-08-23-19-16-47.pt" \
-        --hyperparameters="hyperparameters/jepa_lunar_lander.json" \
+        --dataset="datasets/LunarLander-v3/state-action/dataset_2026-08-25-20-31-29.pt" \
+        --grid="hyperparameters/jepa_lunar_lander_grid.json" \
         --normalise-obs \
         -dt="sa" -l -s
 elif [ "$COMMAND" = "dataset_from_encoder" ]; then
     uv run python -m src.datasets.dataset_from_encoder \
         --environment="LunarLander-v3" \
-        --dataset="datasets/LunarLander-v3/state-action/dataset_2026-08-23-19-16-47.pt" \
-        --model="saved_networks/jepa/model/LunarLander-v3/LunarLander-v3@2026-08-24-19-21-32/model_149.pt"
+        --dataset="datasets/LunarLander-v3/state-action/dataset_2026-08-25-20-31-29.pt" \
+        --model="saved_networks/jepa/model/LunarLander-v3/LunarLander-v3@2026-08-25-20-46-18/LunarLander-v3@2026-08-25-20-46-18_RUN-0/model_083.pt"
 elif [ "$COMMAND" = "train_decoder" ]; then
     uv run python -m src.train \
         --environment="LunarLander-v3" \
         --algorithm="jepa_decoder" \
-        --dataset="datasets/LunarLander-v3/decoder/dataset_2026-08-24-19-44-07.pt" \
+        --dataset="datasets/LunarLander-v3/decoder/dataset_2026-08-25-21-02-25.pt" \
         --hyperparameters="hyperparameters/jepa_decoder_lunar_lander.json" \
         --dataset_type="encoder" -l -s
 elif [ "$COMMAND" = "visualise" ]; then
     uv run python -m src.visualise \
         --environment="LunarLander-v3" \
-        --model="saved_networks/jepa/model/LunarLander-v3/LunarLander-v3@2026-08-24-19-21-32/model_149.pt" \
-        --decoder="saved_networks/jepa/decoder/LunarLander-v3/LunarLander-v3@2026-08-24-19-44-46/decoder_89.pt" \
+        --model="saved_networks/jepa/model/LunarLander-v3/LunarLander-v3@2026-08-25-20-46-18/LunarLander-v3@2026-08-25-20-46-18_RUN-0/model_083.pt" \
+        --decoder="saved_networks/jepa/decoder/LunarLander-v3/LunarLander-v3@2026-08-25-21-02-50/decoder_89.pt" \
         --policy="categorical" \
         --weights="/home/kieran/coding-projects/My-RL-Impl/saved_policies/LunarLander-v3/LunarLander-v3@2026-07-12-17-18-42/policy_1999999.pth" \
-        --sync
+        --sync \
+        --sync_timesteps=5
 elif [ "$COMMAND" = "evaluate" ]; then
     uv run python -m src.evaluate \
         --environment="<gymnasium environment id>" \

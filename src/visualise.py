@@ -23,6 +23,7 @@ from pathlib import Path
 import cv2
 import torch
 from datetime import datetime
+import time
 
 _WORLD_MODEL_WINDOW = "World Model"
 
@@ -31,11 +32,14 @@ class Visualiser(BaseEvaluator):
 
     def __init__(self, task_id: str, model_path: str, decoder_path: str,
                  policy_id_path: Optional[tuple[str, str]] = None, mdp_config: MdpConfig = MdpConfig(),
-                 sync_reset: bool = False):
+                 sync_reset: bool = False,
+                 sync_timesteps : int = 10**10):
         self._mdp_config = replace(mdp_config, normalise_obs=False, normalise_reward=False)
         super().__init__(task_id, mdp_config=self._mdp_config)
 
         self.sync_reset = sync_reset
+        self._sync_timesteps = sync_timesteps
+
         self._mdp_world_model = MdpGymWritable(task_id, device=self.device, mdp_config=self._mdp_config, render_mode="rgb_array")
 
         self.model = JEPAModel.load(model_path, map_location=self.device)
@@ -67,8 +71,17 @@ class Visualiser(BaseEvaluator):
         last_observation_writable_world_model_norm = self.standardize(last_observation_writable, self.model.obs_norm_stats)
         last_observation_writable_latent = self.model.encoder(last_observation_writable_world_model_norm)
 
+        timestep_main, timestep_world_model = 0, 0
+
         with torch.no_grad():
             while not self._stop.is_set():
+                if self.sync_reset and timestep_main % self._sync_timesteps == 0:
+                    self._mdp_world_model.set_state(last_observation_main)
+                    last_observation_writable = last_observation_main
+                    last_observation_writable_world_model_norm = self.standardize(last_observation_writable,
+                                                                                  self.model.obs_norm_stats)
+                    last_observation_writable_latent = self.model.encoder(last_observation_writable_world_model_norm)
+
                 # MAIN
                 last_obs_policy_norm = self.standardize(last_observation_main, self.policy.obs_norm_stats)
 
@@ -103,8 +116,11 @@ class Visualiser(BaseEvaluator):
 
                 if termination_state_main is not MdpTerminationState.IN_PROGRESS:
                     last_observation_main = self._mdp.reset(seed=reset_seed)
+                    timestep_main = 0
+
                 else:
                     last_observation_main =  next_obs_main
+                    timestep_main += 1
 
                 if termination_state_world_model is not MdpTerminationState.IN_PROGRESS:
                     last_observation_writable = self._mdp_world_model.reset(seed=reset_seed)
@@ -116,8 +132,13 @@ class Visualiser(BaseEvaluator):
                     last_observation_writable_world_model_norm = self.standardize(last_observation_writable,
                                                                                   self.model.obs_norm_stats)
                     last_observation_writable_latent = self.model.encoder(last_observation_writable_world_model_norm)
+
+                    timestep_world_model = 0
                 else:
                     last_observation_writable, last_observation_writable_latent = next_obs_world_model, next_obs_latent
+                    timestep_world_model += 1
+
+                time.sleep(0.1)
 
         self._mdp_world_model.close()
         cv2.destroyAllWindows()
@@ -136,6 +157,7 @@ def parse_args():
 
 
     parser.add_argument("--sync", help="Should we sync mdp resetting", action="store_true")
+    parser.add_argument("--sync_timesteps", "-st", help="Number of timesteps before syncing", default=10**10)
 
 
     return parser.parse_args()
@@ -144,7 +166,8 @@ def parse_args():
 def main():
     args = parse_args()
     policy_id_path = (args.policy, args.weights) if args.policy and args.weights else None
-    visualiser = Visualiser(args.environment, args.model, args.decoder, policy_id_path, sync_reset=args.sync)
+    visualiser = Visualiser(args.environment, args.model, args.decoder, policy_id_path, sync_reset=args.sync,
+                            sync_timesteps=int(args.sync_timesteps))
     visualiser.evaluate()
 
 

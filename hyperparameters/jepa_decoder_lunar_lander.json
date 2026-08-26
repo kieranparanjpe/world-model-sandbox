@@ -2,7 +2,7 @@
   "algorithm": {
     "epochs": 90,
     "batch_size": 512,
-    "decoder_lr": 0.003,
+    "decoder_lr": 0.0003,
     "decoder_regularization": 0,
     "validation_method_config": {
       "method": "train-validation",
