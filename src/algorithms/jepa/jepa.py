@@ -99,50 +99,124 @@ class JEPA(Algorithm):
         for param in self.label_encoder.parameters():
             param.requires_grad = False
 
-    def loss(self, current_observations, actions, next_observations, mask, epoch: int):
-        # current_observations/actions/next_observations: [B, Number Steps, Stat Size]. mask: [B, Number Steps]
-        mask = mask.float()
-        
+    def _get_curriculum_k(self, epoch: int) -> int:
         if self.hyperparameters.curriculum_epochs > 0:
             progress = min(1.0, epoch / self.hyperparameters.curriculum_epochs)
-            max_k = 1 + int((self.dataset.number_steps - 1) * progress)
-        else:
-            max_k = self.dataset.number_steps
-            
-        gamma = self.hyperparameters.lookahead_gamma
+            return 1 + int((self.dataset.number_steps - 1) * progress)
+        return self.dataset.number_steps
 
-        # Get (s, a, s')
-        current_observation = current_observations[:, 0]
-        action = actions[:, 0]
-        next_observation = next_observations[:, 0]
+    def _autoregressive_rollout(self, current_observations, actions, next_observations, max_k):
+        step_losses = []
+        raw_losses = []
+        preds_norm_list = []
+        targets_norm_list = []
 
-        predicted_obs_encoding, _ = self.model(current_observation, action) # Find P(E(s), a)
-        encoded_label = self.label_encoder(next_observation).detach() # Find E'(s')
-        
-        pred_norm = F.normalize(predicted_obs_encoding, p=2, dim=-1)
-        target_norm = F.normalize(encoded_label, p=2, dim=-1)
-        step_loss = self.criterion(pred_norm, target_norm).mean(dim=-1)
-        
-        weighted_loss = step_loss * mask[:, 0]
-        sum_weights = mask[:, 0].clone()
+        # k=1 rollout
+        pred_enc, _ = self.model(current_observations[:, 0], actions[:, 0])
+        target_enc = self.label_encoder(next_observations[:, 0]).detach()
 
+        pred_norm = F.normalize(pred_enc, p=2, dim=-1)
+        target_norm = F.normalize(target_enc, p=2, dim=-1)
+
+        step_losses.append(self.criterion(pred_norm, target_norm).mean(dim=-1))
+        raw_losses.append(self.criterion(pred_enc, target_enc).mean(dim=-1))
+        preds_norm_list.append(pred_norm)
+        targets_norm_list.append(target_norm)
+
+        # k>1 autoregressive loop
         for i in range(1, max_k):
-            action = actions[:, i]
-            next_observation = next_observations[:, i]
-
-            predicted_obs_encoding = self.model.predictor(predicted_obs_encoding, action) # Find P(P(E(s), a), a') (or deeper)
-            encoded_label = self.label_encoder(next_observation).detach() # Find E'(s^n)
+            pred_enc = self.model.predictor(pred_enc, actions[:, i])
+            target_enc = self.label_encoder(next_observations[:, i]).detach()
 
             # L2 Normalize before loss to prevent explosion
-            pred_norm = F.normalize(predicted_obs_encoding, p=2, dim=-1)
-            target_norm = F.normalize(encoded_label, p=2, dim=-1)
-            step_loss = self.criterion(pred_norm, target_norm).mean(dim=-1)
-            
-            discounted_weight = mask[:, i] * (gamma ** i)
-            weighted_loss = weighted_loss + step_loss * discounted_weight
-            sum_weights = sum_weights + discounted_weight
+            pred_norm = F.normalize(pred_enc, p=2, dim=-1)
+            target_norm = F.normalize(target_enc, p=2, dim=-1)
 
-        return (weighted_loss / sum_weights.clamp(min=1e-8)).mean()
+            step_losses.append(self.criterion(pred_norm, target_norm).mean(dim=-1))
+            raw_losses.append(self.criterion(pred_enc, target_enc).mean(dim=-1))
+            preds_norm_list.append(pred_norm)
+            targets_norm_list.append(target_norm)
+
+        return step_losses, raw_losses, preds_norm_list, targets_norm_list
+
+    def _calculate_discounted_loss(self, step_losses, mask, max_k):
+        gamma = self.hyperparameters.lookahead_gamma
+        mask_k = mask[:, :max_k].t()  # [max_k, B]
+        gammas = torch.tensor([gamma ** i for i in range(max_k)], device=self.device).view(-1, 1)
+
+        stacked_losses = torch.stack(step_losses)  # [max_k, B]
+        discounted_weights = mask_k * gammas  # [max_k, B]
+
+        per_sample_loss = (stacked_losses * discounted_weights).sum(dim=0)  # [B]
+        per_sample_weights = discounted_weights.sum(dim=0).clamp(min=1e-8)  # [B]
+
+        return (per_sample_loss / per_sample_weights).mean()
+
+    def _compute_metrics(self, step_losses, raw_losses, preds, targets, mask):
+        max_k = len(step_losses)
+        mask_k = mask[:, :max_k].t()  # [max_k, B]
+
+        # 1. Standard Deviations (to detect representation collapse)
+        all_preds = torch.stack(preds).view(-1, preds[0].size(-1))
+        all_targets = torch.stack(targets).view(-1, targets[0].size(-1))
+
+        pred_std = all_preds.std(dim=0).mean().item() if all_preds.size(0) > 1 else 0.0
+        target_std = all_targets.std(dim=0).mean().item() if all_targets.size(0) > 1 else 0.0
+
+        # 2. Raw & Undiscounted Losses
+        stacked_step = torch.stack(step_losses) * mask_k
+        stacked_raw = torch.stack(raw_losses) * mask_k
+        valid_count = mask_k.sum().clamp(min=1e-8)
+
+        loss_undiscounted = (stacked_step.sum() / valid_count).item()
+        loss_raw = (stacked_raw.sum() / valid_count).item()
+
+        metrics = {
+            "encodings_std": target_std,
+            "predictions_std": pred_std,
+            "loss_undiscounted": loss_undiscounted,
+            "loss_raw": loss_raw,
+        }
+
+        # 3. Horizon Degradation Metrics
+        step_avgs = []
+        for i in range(max_k):
+            valid_b = mask_k[i].sum().clamp(min=1e-8)
+            step_avg = (stacked_step[i].sum() / valid_b).item()
+            step_avgs.append(step_avg)
+            metrics[f"step_loss_{i+1:02d}"] = step_avg
+
+        if len(step_avgs) > 1 and step_avgs[0] > 0:
+            metrics["degradation_ratio"] = step_avgs[-1] / step_avgs[0]
+        else:
+            metrics["degradation_ratio"] = 1.0
+
+        return metrics
+
+    def _get_metric_keys(self, max_k: int, prefix: str) -> dict[str, float]:
+        keys = {
+            f"metrics/{prefix}_encodings_std": 0.0,
+            f"metrics/{prefix}_predictions_std": 0.0,
+            f"metrics/{prefix}_loss_undiscounted": 0.0,
+            f"metrics/{prefix}_loss_raw": 0.0,
+            f"metrics/{prefix}_degradation_ratio": 0.0,
+        }
+        for i in range(1, max_k + 1):
+            keys[f"metrics/{prefix}_step_loss_{i:02d}"] = 0.0
+        return keys
+
+    def loss(self, current_observations, actions, next_observations, mask, epoch: int):
+        mask = mask.float()
+        max_k = self._get_curriculum_k(epoch)
+
+        step_losses, raw_losses, preds, targets = self._autoregressive_rollout(
+            current_observations, actions, next_observations, max_k
+        )
+
+        final_loss = self._calculate_discounted_loss(step_losses, mask, max_k)
+        metrics_dict = self._compute_metrics(step_losses, raw_losses, preds, targets, mask)
+
+        return final_loss, metrics_dict
 
     def extract_batch(self, batch: dict[str, torch.Tensor]) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         return (batch["current_observations"].to(self.device),
@@ -151,21 +225,20 @@ class JEPA(Algorithm):
                 batch["valid"].to(self.device))
 
     def train_single_epoch(self, train_loader : DataLoader[DatasetSA], epoch: int):
-        """
-        Side effect: places loss into logger["losses/loss"]
-        """
         self.model.train()
         self.label_encoder.train()
 
-        self.logger.reset("losses/train_loss")
+        max_k = self._get_curriculum_k(epoch)
+        metric_keys = self._get_metric_keys(max_k, "train")
+        self.logger.add_elements(metric_keys)
+        self.logger.reset("losses/train_loss", *metric_keys.keys())
 
         for batch in train_loader:
             current_observations, actions, next_observations, mask = self.extract_batch(batch)
 
-            loss = self.loss(current_observations, actions, next_observations, mask, epoch)
+            loss, metrics = self.loss(current_observations, actions, next_observations, mask, epoch)
 
             self.model.zero_grad()
-
             loss.backward()
 
             self.encoder_optimiser.step()
@@ -175,32 +248,34 @@ class JEPA(Algorithm):
                 # Update label encoder weights with EMA
                 for target_param, online_param in zip(self.label_encoder.parameters(),
                                                        self.model.encoder.parameters()):
-                    # EMA: target = momentum * target + (1 - momentum) * online
                     target_param.lerp_(online_param, 1.0 - self.hyperparameters.label_encoder_ema_momentum)
 
                 # Logging and stats
                 batch_length = current_observations.size(0)
                 total_samples = len(train_loader.dataset) # type: ignore
-                self.logger.sum_log_data({
-                    "losses/train_loss": loss.item() * batch_length / total_samples
-                })
+                weight = batch_length / total_samples
+
+                self.logger.sum_log_data({"losses/train_loss": loss.item() * weight})
+                self.logger.sum_log_data({f"metrics/train_{k}": v * weight for k, v in metrics.items()})
 
     def evaluate(self, validation_loader : DataLoader[DatasetSA], epoch: int):
         self.model.eval()
         self.label_encoder.eval()
 
-        self.logger.reset("losses/validation_loss")
+        max_k = self._get_curriculum_k(epoch)
+        metric_keys = self._get_metric_keys(max_k, "validation")
+        self.logger.add_elements(metric_keys)
+        self.logger.reset("losses/validation_loss", *metric_keys.keys())
 
         with torch.no_grad():
             for batch in validation_loader:
                 current_observations, actions, next_observations, mask = self.extract_batch(batch)
-                loss = self.loss(current_observations, actions, next_observations, mask, epoch)
 
-                # Logging and stats
+                loss, metrics = self.loss(current_observations, actions, next_observations, mask, epoch)
+
                 batch_length = current_observations.size(0)
                 total_samples = len(validation_loader.dataset)  # type: ignore
-                self.logger.sum_log_data({
-                    "losses/validation_loss": loss.item() * batch_length / total_samples
-                })
+                weight = batch_length / total_samples
 
-
+                self.logger.sum_log_data({"losses/validation_loss": loss.item() * weight})
+                self.logger.sum_log_data({f"metrics/validation_{k}": v * weight for k, v in metrics.items()})

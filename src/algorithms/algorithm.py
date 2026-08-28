@@ -80,12 +80,6 @@ class Algorithm(ABC):
         for fold, (train_dataset, validation_dataset) in enumerate(datasets):
             self.reset_models()
             self.logger.reset("epoch")
-            if len(datasets) > 1:
-                self.logger.set_prefix({
-                    "epoch": f"{fold}-",
-                    "losses/train_loss": f"{fold}-",
-                    "losses/validation_loss": f"{fold}-"
-                })
             for epoch in tqdm(range(self.hyperparameters.epochs)):
                 train_loader = DataLoader(train_dataset, shuffle=True, batch_size=self.hyperparameters.batch_size, pin_memory=(self.device.type == "cuda"))
                 validation_loader = DataLoader(validation_dataset, batch_size=self.hyperparameters.batch_size, pin_memory=(self.device.type == "cuda"))
@@ -93,10 +87,13 @@ class Algorithm(ABC):
                 self.evaluate(validation_loader, epoch)
 
                 # Logging
+                if len(datasets) > 1:
+                    self.logger.set_prefix({k: f"{fold}-" for k in self.logger.keys()})
+                
                 self.logger.set_log_data({
                     "epoch": epoch
                 })
-                self.logger.log_data("losses/train_loss", "losses/validation_loss", "epoch")
+                self.logger.log_data()
 
                 # Save checkpoint models
                 if self.should_save_models:

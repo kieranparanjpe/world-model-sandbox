@@ -41,12 +41,11 @@ class DatasetFromMDP:
     def collect(self):
         last_observation = self._mdp.reset()
 
-        action_sampler = self._policy.forward(last_observation)
-
         episode = torch.tensor(0, device=self._mdp.device)
 
         with torch.no_grad():
             for timestep in tqdm(range(self._timesteps)):
+                action_sampler = self._policy.forward(last_observation)
                 action = self._policy.sample_action(action_sampler)
                 next_observation, _, termination_state = self._mdp.step(action)
 

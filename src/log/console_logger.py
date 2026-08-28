@@ -18,6 +18,9 @@ class ConsoleLogger(Logger):
     def finish(self):
         pass
 
+    def keys(self) -> list[str]:
+        return list(self._elements.keys())
+
     def add_elements(self, elements: Dict[str, Any]):
         self._elements.update(deepcopy(elements))
         self._elements_start.update(elements)
