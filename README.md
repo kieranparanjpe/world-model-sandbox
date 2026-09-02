@@ -38,14 +38,31 @@ figure out which features of the state are important, and represent it in the la
 this latent space. Finally, to do visualisation, we train a decoder which allows us to go from encoding space to 
 state space: `s' = D(z')`. 
 
+#### Training
+
+We first collect a dataset of state-action pairs by following rollouts in the environment of choice, following either 
+a trained or random policy. I support both teacher forcing and autoregressive training. I found better results autoregressively. 
+
+Let $P(s, a)$ be the predictor, $E(s)$ be the encoder, and $E'(s)$ be the encoder updated according to an EMA.
+
+Let $Q(s_t, a_{t+n}) = P(Q(s_t, a_{t+n-1}), a_{t+n})$ and $Q(s_t, a_t) = P(E(s_t), a_t)$. 
+
+Then the loss function, generalised to $N$ autoregressive steps, is given by: 
+
+$$L_t^N = \frac{\sum_{n=0}^{N} \gamma^n MSE(\text{normalise}(Q(s_t, a_{t+n})) , \text{normalise}( E'(s_{t+n+1})) )} {\sum_{n=0}^{N} \gamma^n}$$
+
+For $N = 0$ this collapses to: 
+
+$$ L_t^0 = MSE(\text{normalise}( P(s_t, a_t) ) , \text{normalise}( E'(s_{t+1}) ) ) $$
+
 This project draws heavily from [LeWorldModel](https://arxiv.org/abs/2603.19312), which similarly uses JEPA world 
 models. In the paper, their state representation is always an image. This highlights one of the key benefits of JEPA,
 which is to encode high-dimensional states (like images) into a lower-dimensional embedding. 
 
-For this project, I do not use images for state. Instead, I use the Markovian states supplied by the MDPs. To be honest,
+For this project, I do not use images for the state. Instead, I use the Markovian states supplied by the MDPs. To be honest,
 this project doesn't really gain a lot from using JEPA, as the encoding is actually higher dimensional than the 
 Markovian state. I'm not using images because I don't have access to large amounts of compute, required for higher 
-dimension states, and I wanted to keep the project simple. However, I still wanted to implement JEPA to better 
+dimensional states, and I wanted to keep the project simple. However, I still wanted to implement JEPA to better 
 understand it. I also cheated a little bit in that the policies I trained on are the same as the ones I used to collect rollouts.
 It's possible to train and evaluate on different policies, but I chose not to for simplicity. This project is by no means rigorous. 
 
