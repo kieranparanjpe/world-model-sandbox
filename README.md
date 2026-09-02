@@ -5,38 +5,37 @@
 The goal of this project is to experiment with world models, specifically action conditioned JEPA models. This builds
 on a [previous project I did](https://github.com/kieranparanjpe/My-RL-Impl), where I implemented PPO and trained some
 policies to complete various [gymnasium](https://gymnasium.farama.org/index.html) tasks. This project uses the same environments and policies, but it flips 
-the goal. The RL project learned a policy to map from S -> A (state to action), and then evaluated performance by 
+the goal. The RL project learned a policy to map from $S \to A$ (state to action), and then evaluated performance by 
 taking those actions in the physics simulator backed environment mdp. This project, aims to replace the physics 
 simulator backed environment with a learned representation of the environment. So to compare:
 
 **RL (1):**
-```
-s_t -> Policy(s_t) -> a_t -> Take a_t in physics sim backed environment -> s_{t+1} -> repeat
-                             └───────────── learned/focus ────────────┘
-```
+
+$$s_t \to \pi(s_t) \to a_t \to \underbrace{\text{physics sim}(s_t, a_t)}_{\text{learned/focus}} \to s_{t+1} \to \cdots$$
 
 **World Model (2):**
-```
-s_t -> Policy(s_t) -> a_t -> World Model(s_t, a_t) -> s_{t+1} -> repeat
-                             └── learned/focus ──┘
-```
+
+$$s_t \to \pi(s_t) \to a_t \to \underbrace{W(s_t, a_t)}_{\text{learned/focus}} \to s_{t+1} \to \cdots$$
+
+where $\pi(s_t)$ is the policy mapping states to actions, and $W(s_t, a_t)$ is the world model mapping a state-action pair to the next state.
+
 
 ### Why do we do this?
 
 Consider a policy running on a robot in the real world. In this case, the simulator in (1) is replaced by the real 
-world. You can see that the only way to find s_{t+1} is to actually take the action and see what happens. This could 
+world. You can see that the only way to find $s_{t+1}$ is to actually take the action and see what happens. This could 
 potentially be problematic, because the robot has no way of assessing the consequences of its actions before taking 
-them. In contrast, with the world model, we can take some candidate action a_t, plug it into our world model, and 
-get an estimation of the next state, s_{t+1}, without taking an action in the real world. 
+them. In contrast, with the world model, we can take some candidate action $a_t$, plug it into our world model, and 
+get an estimation of the next state, $s_{t+1}$, without taking an action in the real world. 
 
 ### Technical Overview
 
 I used JEPA (Joint Embedding Predictive Architecture) for this world model. JEPA is made up of 2 parts: the encoder 
-and the predictor. Given some state `s`, we first encode it to be `z = E(s)`. We then pass this encoding and the 
-action to the predictor to get the encoding of the next state `z' = P(E(s), a)`. The idea is that the encoder will 
+and the predictor. Given some state $s$, we first encode it to be $z = E(s)$. We then pass this encoding and the 
+action to the predictor to get the encoding of the next state $z' = P(E(s), a)$. The idea is that the encoder will 
 figure out which features of the state are important, and represent it in the latent space. Then, we predict only in 
 this latent space. Finally, to do visualisation, we train a decoder which allows us to go from encoding space to 
-state space: `s' = D(z')`. 
+state space: $s' = D(z')$. 
 
 #### Training
 
