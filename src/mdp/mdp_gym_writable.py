@@ -1,10 +1,11 @@
 from typing import Callable, Optional
-import sys
 
 import numpy as np
 import torch
+import gymnasium.envs.box2d.lunar_lander as lunar_lander_module
 from rl_commons.mdp import MdpGym, MdpTerminationState
 
+from src.mdp import envs  # noqa: F401 — registers custom environments with gymnasium
 from src.mdp.mdp_writable import MdpWritable
 
 
@@ -88,16 +89,14 @@ class MdpGymWritable(MdpWritable, MdpGym):
         env = self._env.unwrapped
         np_state = state.cpu().numpy()
 
-        # Dynamically fetch the module where this environment was defined
-        ll_module = sys.modules[env.__class__.__module__]
-
-        # Extract the exact constants from the module
-        VIEWPORT_W = ll_module.VIEWPORT_W
-        VIEWPORT_H = ll_module.VIEWPORT_H
-        SCALE = ll_module.SCALE
-        FPS = ll_module.FPS
-        LEG_DOWN = ll_module.LEG_DOWN
-        LEG_AWAY = ll_module.LEG_AWAY
+        # Extract the exact constants from the module, even if env is a LunarLander subclass
+        # (e.g. StaticLunarLander) that doesn't redefine them.
+        VIEWPORT_W = lunar_lander_module.VIEWPORT_W
+        VIEWPORT_H = lunar_lander_module.VIEWPORT_H
+        SCALE = lunar_lander_module.SCALE
+        FPS = lunar_lander_module.FPS
+        LEG_DOWN = lunar_lander_module.LEG_DOWN
+        LEG_AWAY = lunar_lander_module.LEG_AWAY
 
         # Reverse the scaling applied in LunarLander's step() function
         # Note: env.helipad_y is dynamically calculated and stored on the env object during env.reset()

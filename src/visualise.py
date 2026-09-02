@@ -26,6 +26,7 @@ from datetime import datetime
 import time
 
 _WORLD_MODEL_WINDOW = "World Model"
+_MAIN_WINDOW = "Main"
 
 
 class Visualiser(BaseEvaluator):
@@ -33,9 +34,10 @@ class Visualiser(BaseEvaluator):
     def __init__(self, task_id: str, model_path: str, decoder_path: str,
                  policy_id_path: Optional[tuple[str, str]] = None, mdp_config: MdpConfig = MdpConfig(),
                  sync_reset: bool = False,
-                 sync_timesteps : int = 10**10):
+                 sync_timesteps : int = 10**10,
+                 render_mode: str = "rgb_array"):
         self._mdp_config = replace(mdp_config, normalise_obs=False, normalise_reward=False)
-        super().__init__(task_id, mdp_config=self._mdp_config)
+        super().__init__(task_id, mdp_config=self._mdp_config, render_mode=render_mode)
 
         self.sync_reset = sync_reset
         self._sync_timesteps = sync_timesteps
@@ -89,6 +91,11 @@ class Visualiser(BaseEvaluator):
 
                 next_obs_main, _, termination_state_main = self._mdp.step(action)
 
+                frame_main = cv2.cvtColor(self._mdp.render(), cv2.COLOR_RGB2BGR)
+                cv2.putText(frame_main, f"t={timestep_main}", (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.6,
+                            (255, 255, 255), 2, cv2.LINE_AA)
+                cv2.imshow(_MAIN_WINDOW, frame_main)
+
                 # WORLD MODEL — reuse same action from main
                 if self._mdp_world_model.discrete:
                     action = torch.nn.functional.one_hot(action, self._mdp_world_model.action_dimension)
@@ -102,8 +109,10 @@ class Visualiser(BaseEvaluator):
 
                 termination_state_world_model = self._mdp_world_model.set_state(next_obs_world_model)
 
-                frame = self._mdp_world_model.render()
-                cv2.imshow(_WORLD_MODEL_WINDOW, cv2.cvtColor(frame, cv2.COLOR_RGB2BGR))
+                frame = cv2.cvtColor(self._mdp_world_model.render(), cv2.COLOR_RGB2BGR)
+                cv2.putText(frame, f"t={timestep_world_model}", (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.6,
+                            (255, 255, 255), 2, cv2.LINE_AA)
+                cv2.imshow(_WORLD_MODEL_WINDOW, frame)
                 cv2.waitKey(1)
 
                 # Resetting:

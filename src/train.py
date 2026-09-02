@@ -68,7 +68,7 @@ class Trainer(BaseTrainerRL):
 def parse_args():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--environment", "-e", help="Environment Id to run", default="LunarLander-v3")
+    parser.add_argument("--environment", "-e", help="Environment Id to run", default="StaticLunarLander-v0")
     parser.add_argument("--algorithm", "-a", help="Algorithm to use", default="jepa")
     parser.add_argument("--dataset", "-d", help="Path to dataset")
     parser.add_argument("--hyperparameters", help="Path to hyperparameter json file", default=None)

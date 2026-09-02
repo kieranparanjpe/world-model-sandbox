@@ -37,7 +37,8 @@ class DatasetSA(Dataset):
             self.apply_action_normalization(action_norm)
 
     def set_number_steps(self, number_steps: int):
-        assert 0 < number_steps <= len(self.current_observations)
+        if not(0 < number_steps <= len(self.current_observations)):
+            raise ValueError(f"Number of lookahead steps {number_steps} is illegal value")
         self.number_steps = number_steps
 
     def apply_obs_normalization(self, norm : NormalisationStats):

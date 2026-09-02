@@ -43,9 +43,15 @@ class DatasetFromMDP:
 
         episode = torch.tensor(0, device=self._mdp.device)
 
+        # Policy checkpoints may carry their own obs_norm_stats (identity if the policy was
+        # never trained normalized). The dataset itself must stay raw -- train.py normalizes
+        # it exactly once via --normalise-obs/--obs-norm-source -- so only the copy fed to the
+        # policy is transformed; what gets stored in self._dataset is untouched.
+        obs_mean, obs_std = self._policy.obs_norm_stats.as_tensors(dtype=torch.float32, device=self._mdp.device)
+
         with torch.no_grad():
             for timestep in tqdm(range(self._timesteps)):
-                action_sampler = self._policy.forward(last_observation)
+                action_sampler = self._policy.forward((last_observation - obs_mean) / obs_std)
                 action = self._policy.sample_action(action_sampler)
                 next_observation, _, termination_state = self._mdp.step(action)
 
