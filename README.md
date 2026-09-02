@@ -63,7 +63,7 @@ For this project, I do not use images for the state. Instead, I use the Markovia
 this project doesn't really gain a lot from using JEPA, as the encoding is actually higher dimensional than the 
 Markovian state. I'm not using images because I don't have access to large amounts of compute, required for higher 
 dimensional states, and I wanted to keep the project simple. However, I still wanted to implement JEPA to better 
-understand it. I also cheated a little bit in that the policies I trained on are the same as the ones I used to collect rollouts.
+understand it. I also cheated a little bit in that the policies I visualised on are the same as the ones I used to collect rollouts.
 It's possible to train and evaluate on different policies, but I chose not to for simplicity. This project is by no means rigorous. 
 
 
