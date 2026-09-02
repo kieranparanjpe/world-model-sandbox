@@ -33,19 +33,20 @@ elif [ "$COMMAND" = "train_decoder" ]; then
         --normalise-obs \
         --dataset_type="encoder" -l -s
 elif [ "$COMMAND" = "visualise" ]; then
-    uv run python -m src.visualise \
-        --environment="Humanoid-v5" \
-        --model="saved_networks/jepa/model/Humanoid-v5/Humanoid-v5@2026-08-30-22-10-49/Humanoid-v5@2026-08-30-22-10-49_RUN-2/model_149.pt" \
-        --decoder="saved_networks/jepa/decoder/Humanoid-v5/Humanoid-v5@2026-08-31-22-46-02/decoder_89.pt" \
-        --policy="single_beta" \
-        --weights="/home/kieran/coding-projects/My-RL-Impl/saved_policies/Humanoid-v5/Humanoid-v5@2026-08-18-00-08-30/policy_5999999.pth" \
-        --sync
 # Walker2d
-#        --environment="Walker2d-v5" \
-#        --model="saved_networks/jepa/model/Walker2d-v5/Walker2d-v5@2026-08-30-22-11-39/Walker2d-v5@2026-08-30-22-11-39_RUN-2/model_149.pt" \
-#        --decoder="saved_networks/jepa/decoder/Walker2d-v5/Walker2d-v5@2026-08-31-21-44-10/decoder_89.pt" \
+    uv run python -m src.visualise \
+        --environment="Walker2d-v5" \
+        --model="saved_networks/jepa/model/Walker2d-v5/Walker2d-v5@2026-08-30-22-11-39/Walker2d-v5@2026-08-30-22-11-39_RUN-2/model_149.pt" \
+        --decoder="saved_networks/jepa/decoder/Walker2d-v5/Walker2d-v5@2026-08-31-21-44-10/decoder_89.pt" \
+        --policy="single_beta" \
+        --weights="/home/kieran/coding-projects/My-RL-Impl/saved_policies/Walker2d-v5/Walker2d-v5@2026-06-24-17-23-44/policy_1999999.pth" \
+        --sync
+# Humanoid
+#        --environment="Humanoid-v5" \
+#        --model="saved_networks/jepa/model/Humanoid-v5/Humanoid-v5@2026-08-30-22-10-49/Humanoid-v5@2026-08-30-22-10-49_RUN-2/model_149.pt" \
+#        --decoder="saved_networks/jepa/decoder/Humanoid-v5/Humanoid-v5@2026-08-31-22-46-02/decoder_89.pt" \
 #        --policy="single_beta" \
-#        --weights="/home/kieran/coding-projects/My-RL-Impl/saved_policies/Walker2d-v5/Walker2d-v5@2026-06-24-17-23-44/policy_1999999.pth" \
+#        --weights="/home/kieran/coding-projects/My-RL-Impl/saved_policies/Humanoid-v5/Humanoid-v5@2026-08-18-00-08-30/policy_5999999.pth" \
 #        --sync
 # Lunar Lander
 #        --environment="StaticLunarLander-v0" \

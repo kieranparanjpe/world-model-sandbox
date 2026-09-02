@@ -147,7 +147,7 @@ class Visualiser(BaseEvaluator):
                     last_observation_writable, last_observation_writable_latent = next_obs_world_model, next_obs_latent
                     timestep_world_model += 1
 
-                time.sleep(0.1)
+                # time.sleep(0.1)
 
         self._mdp_world_model.close()
         cv2.destroyAllWindows()
