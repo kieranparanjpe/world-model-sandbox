@@ -11,7 +11,7 @@ simulator backed environment with a learned representation of the environment. S
 
 **RL (1):**
 
-$$s_t \to \pi(s_t) \to a_t \to \underbrace{\text{physics sim}(s_t, a_t)}_{\text{learned/focus}} \to s_{t+1} \to \cdots$$
+$$s_t \to \underbrace{\pi(s_t)}_{\text{learned/focus}} \to a_t \to \text{physics sim}(s_t, a_t) \to s_{t+1} \to \cdots$$
 
 **World Model (2):**
 
